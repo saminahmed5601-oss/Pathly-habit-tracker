@@ -132,15 +132,39 @@ export async function saveUserDataToFirestore(userId: string, data: Record<strin
         const dailyPlan = (data.dailyPlan || {}) as Record<string, unknown>;
         const priorityTasks = (dailyPlan.priorityTasks || []) as Array<{ title?: string }>;
 
+        const userGoals = (data.goals || []) as Array<{
+          title: string;
+          totalMilestones: number;
+          icon?: string;
+          milestones?: Array<{ isCompleted: boolean }>;
+        }>;
+
+        const totalMilestonesCount = userGoals.reduce((acc, g) => acc + (g.totalMilestones || 0), 0);
+        const totalMilestonesCompleted = userGoals.reduce(
+          (acc, g) => acc + (g.milestones?.filter(m => m.isCompleted).length || 0), 
+          0
+        );
+
+        const activeGoals = userGoals.map(g => ({
+          title: g.title,
+          icon: g.icon || '🎯',
+          totalCount: g.totalMilestones || 1,
+          completedCount: g.milestones?.filter(m => m.isCompleted).length || 0,
+        }));
+
         await setDoc(publicDocRef, {
           uid: userId,
           name: profile.name || 'Pathly Explorer',
           avatarId: profile.avatarId || 'sprout',
           photoURL: (data.photoURL as string) || null,
           streak: profile.streakDays || 0,
+          bestStreak: profile.bestStreak || profile.streakDays || 0,
           level: profile.level || 1,
           todayMinutes: data.todayFocusMinutes || 0,
-          todayGoalTitle: priorityTasks[0]?.title || 'Daily Path',
+          todayGoalTitle: priorityTasks[0]?.title || activeGoals[0]?.title || 'Daily Path',
+          totalMilestonesCompleted,
+          totalMilestonesCount,
+          activeGoals,
           updatedAt: new Date().toISOString(),
         }, { merge: true });
       }
@@ -184,9 +208,13 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
   avatarId: string;
   photoURL?: string | null;
   streak: number;
+  bestStreak?: number;
   level: number;
   todayMinutes: number;
   todayGoalTitle: string;
+  totalMilestonesCompleted?: number;
+  totalMilestonesCount?: number;
+  activeGoals?: Array<{ title: string; completedCount: number; totalCount: number; icon: string }>;
 }> {
   const code = formatFriendCode(friendCode);
   const cleanId = code.replace(/[^a-z0-9]/g, '');
@@ -197,9 +225,13 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
     avatarId: 'sprout',
     photoURL: null,
     streak: 0,
+    bestStreak: 0,
     level: 1,
     todayMinutes: 0,
     todayGoalTitle: 'Daily Habits',
+    totalMilestonesCompleted: 0,
+    totalMilestonesCount: 0,
+    activeGoals: [],
   };
 
   if (!db) return defaultBuddy;
@@ -217,9 +249,13 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
             avatarId: d.avatarId || 'sprout',
             photoURL: d.photoURL || null,
             streak: d.streak || 0,
+            bestStreak: d.bestStreak || 0,
             level: d.level || 1,
             todayMinutes: d.todayMinutes || 0,
             todayGoalTitle: d.todayGoalTitle || 'Daily Path',
+            totalMilestonesCompleted: d.totalMilestonesCompleted || 0,
+            totalMilestonesCount: d.totalMilestonesCount || 0,
+            activeGoals: d.activeGoals || [],
           };
         }
       } catch {
@@ -229,9 +265,20 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
     })();
 
     // Max 1-second timeout so UI never hangs if Firestore is not enabled/offline
-    const timeoutPromise = new Promise<{ id: string; name: string; avatarId: string; photoURL?: string | null; streak: number; level: number; todayMinutes: number; todayGoalTitle: string }>((resolve) =>
-      setTimeout(() => resolve(defaultBuddy), 1000)
-    );
+    const timeoutPromise = new Promise<{
+      id: string;
+      name: string;
+      avatarId: string;
+      photoURL?: string | null;
+      streak: number;
+      bestStreak?: number;
+      level: number;
+      todayMinutes: number;
+      todayGoalTitle: string;
+      totalMilestonesCompleted?: number;
+      totalMilestonesCount?: number;
+      activeGoals?: Array<{ title: string; completedCount: number; totalCount: number; icon: string }>;
+    }>((resolve) => setTimeout(() => resolve(defaultBuddy), 1000));
 
     return await Promise.race([fetchPromise, timeoutPromise]);
   } catch {

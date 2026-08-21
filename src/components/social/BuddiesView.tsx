@@ -2,8 +2,10 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { Flame, Heart, Copy, Check, UserPlus, Trash2, Plus, X, Edit3, User, Send, Clock, UserCheck, UserX } from 'lucide-react';
+import { FriendBuddy } from '@/types';
+import { Flame, Heart, Copy, Check, Trash2, Plus, X, Edit3, User, Send, Clock, UserCheck, UserX, ChevronRight, Target } from 'lucide-react';
 import { sounds } from '@/lib/sounds';
+import { BuddyDetailModal } from './BuddyDetailModal';
 
 export function BuddiesView() {
   const { 
@@ -28,6 +30,9 @@ export function BuddiesView() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [copiedMyCode, setCopiedMyCode] = useState(false);
+
+  // Selected Buddy for Full Progress Modal
+  const [selectedBuddy, setSelectedBuddy] = useState<FriendBuddy | null>(null);
 
   // Custom Friend Code Editing State
   const [isEditingCode, setIsEditingCode] = useState(false);
@@ -110,7 +115,7 @@ export function BuddiesView() {
         {/* Left: User Profile Picture & Tag */}
         <div className="flex items-center gap-3">
           {authUser?.photoURL ? (
-            <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-[var(--primary)] shrink-0 shadow-xs">
+            <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-[var(--primary)] shrink-0 shadow-xs bg-emerald-500/10">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={authUser.photoURL} alt={authUser.displayName || 'You'} className="w-full h-full object-cover" />
             </div>
@@ -246,7 +251,7 @@ export function BuddiesView() {
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     {req.fromPhotoURL ? (
-                      <div className="w-10 h-10 rounded-xl overflow-hidden border border-purple-500/30 shrink-0">
+                      <div className="w-10 h-10 rounded-xl overflow-hidden border border-purple-500/30 shrink-0 bg-purple-500/10">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={req.fromPhotoURL} alt={req.fromName} className="w-full h-full object-cover" />
                       </div>
@@ -322,13 +327,18 @@ export function BuddiesView() {
 
       {/* Section Header with + Add Custom Buddy Option */}
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm sm:text-base font-black text-[var(--text-main)]">
-          Connected Squad ({friends.length})
-        </h2>
+        <div>
+          <h2 className="text-sm sm:text-base font-black text-[var(--text-main)]">
+            Connected Squad ({friends.length})
+          </h2>
+          <p className="text-[11px] text-[var(--text-muted)]">
+            Tap any buddy card to inspect what they&apos;re trying to achieve and their real milestones progress!
+          </p>
+        </div>
 
         <button
           onClick={() => setShowAddCustom(!showAddCustom)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--bg-card-subtle)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-bold text-[var(--text-main)] transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--bg-card-subtle)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-bold text-[var(--text-main)] transition-colors shrink-0"
         >
           <Plus className="w-3.5 h-3.5 text-purple-500" />
           <span>Add Custom Buddy</span>
@@ -423,27 +433,31 @@ export function BuddiesView() {
             return (
               <div
                 key={friend.id}
-                className="clean-card p-4 sm:p-5 bg-[var(--bg-card)] border border-[var(--border)] flex flex-col justify-between space-y-3.5"
+                className="clean-card p-4 sm:p-5 bg-[var(--bg-card)] border border-[var(--border)] hover:border-purple-500/50 hover:shadow-md transition-all flex flex-col justify-between space-y-3.5 group"
               >
-                <div>
+                {/* Clickable Card Body to Inspect Progress */}
+                <div
+                  onClick={() => setSelectedBuddy(friend)}
+                  className="cursor-pointer space-y-3.5"
+                >
                   {/* Profile row */}
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                       
                       {/* Real Google Profile Photo or Clean Gradient Letter Avatar */}
                       {friend.photoURL ? (
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl border border-purple-500/30 overflow-hidden shrink-0 bg-purple-500/10 shadow-2xs">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl border-2 border-purple-500/40 overflow-hidden shrink-0 bg-purple-500/10 shadow-xs">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={friend.photoURL} alt={friend.name} className="w-full h-full object-cover" />
                         </div>
                       ) : (
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-600 text-white font-black flex items-center justify-center text-base sm:text-lg shadow-2xs shrink-0 select-none">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-600 text-white font-black flex items-center justify-center text-lg sm:text-xl shadow-xs shrink-0 select-none">
                           {initialLetter}
                         </div>
                       )}
 
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs sm:text-sm font-bold text-[var(--text-main)] flex items-center gap-1.5 truncate">
+                        <div className="text-xs sm:text-sm font-black text-[var(--text-main)] flex items-center gap-1.5 truncate group-hover:text-purple-400 transition-colors">
                           <span className="truncate">{friend.name}</span>
                           <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-500 shrink-0">
                             Lv.{friend.currentLevel}
@@ -455,7 +469,7 @@ export function BuddiesView() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-1 text-xs font-bold text-orange-500 bg-orange-500/10 px-2 py-1 rounded-lg border border-orange-500/20">
                         <Flame className="w-3.5 h-3.5 fill-orange-500 text-orange-500" />
                         <span>{friend.streak}d</span>
@@ -476,9 +490,12 @@ export function BuddiesView() {
                   </div>
 
                   {/* Today's Goal Progress */}
-                  <div className="my-2.5 p-2.5 sm:p-3 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)]">
+                  <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)]">
                     <div className="flex justify-between text-[11px] sm:text-xs font-semibold text-[var(--text-main)] mb-1">
-                      <span className="truncate max-w-[150px]">🎯 {friend.todayGoalTitle}</span>
+                      <span className="truncate max-w-[150px] flex items-center gap-1">
+                        <Target className="w-3 h-3 text-purple-400 shrink-0" />
+                        <span>{friend.todayGoalTitle}</span>
+                      </span>
                       <span className="text-purple-500 font-bold">{friend.todayMinutes}m</span>
                     </div>
                     <div className="w-full bg-[var(--border)] h-1.5 sm:h-2 rounded-full overflow-hidden">
@@ -487,6 +504,21 @@ export function BuddiesView() {
                         style={{ width: `${progressPercent}%` }}
                       />
                     </div>
+                  </div>
+
+                  {/* Visual Progress Stepper & Callout */}
+                  <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)] font-semibold">
+                    <span>
+                      {friend.totalMilestonesCompleted !== undefined ? (
+                        <span>🎯 {friend.totalMilestonesCompleted} milestones achieved</span>
+                      ) : (
+                        <span>✨ Active Habit</span>
+                      )}
+                    </span>
+                    <span className="text-purple-400 group-hover:underline flex items-center gap-0.5">
+                      <span>View Progress</span>
+                      <ChevronRight className="w-3 h-3" />
+                    </span>
                   </div>
 
                   {/* Recent Cheer */}
@@ -521,6 +553,12 @@ export function BuddiesView() {
           })}
         </div>
       )}
+
+      {/* Complete Buddy Progress & Achievement Details Modal */}
+      <BuddyDetailModal
+        buddy={selectedBuddy}
+        onClose={() => setSelectedBuddy(null)}
+      />
 
     </div>
   );

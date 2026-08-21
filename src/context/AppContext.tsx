@@ -749,21 +749,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return { success: true, message: `Friend request sent to ${formattedTarget}!` };
   }, [friendCode, friends, sentRequests, authUser, profile.name, profile.level]);
 
-  const acceptFriendRequest = useCallback((requestId: string) => {
+  const acceptFriendRequest = useCallback(async (requestId: string) => {
     const req = incomingRequests.find(r => r.id === requestId);
     if (!req) return;
 
+    const buddy = await lookupFriendByCode(req.fromTag);
+
     const newBuddy: FriendBuddy = {
-      id: req.fromUid || `f-${req.fromTag.replace(/[^a-z0-9]/g, '')}`,
-      name: req.fromName || req.fromTag,
-      avatarId: 'sprout',
-      photoURL: req.fromPhotoURL || null,
+      id: req.fromUid || buddy.id,
+      name: req.fromName || buddy.name || req.fromTag,
+      avatarId: buddy.avatarId || 'sprout',
+      photoURL: req.fromPhotoURL || buddy.photoURL || null,
       tagline: req.fromTag,
-      currentLevel: req.fromLevel || 1,
-      streak: 0,
-      todayMinutes: 0,
+      currentLevel: req.fromLevel || buddy.level || 1,
+      streak: buddy.streak || 0,
+      bestStreak: buddy.bestStreak || 0,
+      todayMinutes: buddy.todayMinutes || 0,
       todayTargetMinutes: 60,
-      todayGoalTitle: 'Daily Habits',
+      todayGoalTitle: buddy.todayGoalTitle || 'Daily Habits',
+      totalMilestonesCompleted: buddy.totalMilestonesCompleted || 0,
+      totalMilestonesCount: buddy.totalMilestonesCount || 0,
+      activeGoals: buddy.activeGoals || [],
       completedMilestonesToday: 0,
       recentCheers: [],
       isUserAdded: true,

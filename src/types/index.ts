@@ -101,9 +101,13 @@ export interface FriendBuddy {
   tagline: string;
   currentLevel: number;
   streak: number;
+  bestStreak?: number;
   todayMinutes: number;
   todayTargetMinutes: number;
   todayGoalTitle: string;
+  totalMilestonesCompleted?: number;
+  totalMilestonesCount?: number;
+  activeGoals?: Array<{ title: string; completedCount: number; totalCount: number; icon: string }>;
   completedMilestonesToday: number;
   recentCheers: CheerReaction[];
   isUserAdded?: boolean;
