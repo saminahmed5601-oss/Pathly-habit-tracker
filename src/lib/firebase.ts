@@ -15,6 +15,8 @@ import {
   query, 
   where, 
   getDocs,
+  onSnapshot,
+  Unsubscribe,
   Firestore 
 } from 'firebase/firestore';
 
@@ -286,29 +288,89 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
   }
 }
 
-// Send friend request to Firestore
+// Send friend request to Firestore with normalized lowercased tags
 export async function sendFriendRequestToCloud(req: Record<string, unknown>): Promise<void> {
   if (db) {
     try {
+      const normalizedReq = {
+        ...req,
+        toTag: formatFriendCode(String(req.toTag || '')).toLowerCase(),
+        fromTag: formatFriendCode(String(req.fromTag || '')).toLowerCase(),
+        updatedAt: new Date().toISOString(),
+      };
       const ref = doc(db, 'friend_requests', String(req.id));
-      await setDoc(ref, req, { merge: true });
+      await setDoc(ref, normalizedReq, { merge: true });
     } catch (err) {
       console.warn('Firestore sendFriendRequest error:', err);
     }
   }
 }
 
-// Fetch incoming requests from Firestore
+// Real-time listener for incoming friend requests
+export function subscribeToIncomingFriendRequests(
+  userTag: string, 
+  callback: (requests: Array<Record<string, unknown>>) => void
+): Unsubscribe | null {
+  if (!db || !userTag) return null;
+
+  try {
+    const cleanTag = formatFriendCode(userTag).toLowerCase();
+    const q = query(
+      collection(db, 'friend_requests'),
+      where('toTag', '==', cleanTag),
+      where('status', '==', 'pending')
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(requests);
+    }, (err) => {
+      console.warn('Realtime incoming requests subscription error:', err);
+    });
+  } catch (err) {
+    console.warn('subscribeToIncomingFriendRequests setup error:', err);
+    return null;
+  }
+}
+
+// Real-time listener for sent friend requests status updates
+export function subscribeToSentFriendRequests(
+  userTag: string,
+  callback: (requests: Array<Record<string, unknown>>) => void
+): Unsubscribe | null {
+  if (!db || !userTag) return null;
+
+  try {
+    const cleanTag = formatFriendCode(userTag).toLowerCase();
+    const q = query(
+      collection(db, 'friend_requests'),
+      where('fromTag', '==', cleanTag)
+    );
+
+    return onSnapshot(q, (snapshot) => {
+      const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      callback(requests);
+    }, (err) => {
+      console.warn('Realtime sent requests subscription error:', err);
+    });
+  } catch (err) {
+    console.warn('subscribeToSentFriendRequests setup error:', err);
+    return null;
+  }
+}
+
+// Fetch incoming requests from Firestore (Fallback)
 export async function fetchIncomingRequestsFromCloud(userTag: string): Promise<Array<Record<string, unknown>>> {
   if (db) {
     try {
+      const cleanTag = formatFriendCode(userTag).toLowerCase();
       const q = query(
         collection(db, 'friend_requests'), 
-        where('toTag', '==', userTag),
+        where('toTag', '==', cleanTag),
         where('status', '==', 'pending')
       );
       const snap = await getDocs(q);
-      return snap.docs.map(d => d.data());
+      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
     } catch (err) {
       console.warn('Firestore fetchIncomingRequests error:', err);
     }

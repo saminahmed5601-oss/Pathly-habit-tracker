@@ -19,6 +19,7 @@ export function BuddiesView() {
     acceptFriendRequest,
     declineFriendRequest,
     cancelSentRequest,
+    refreshFriendRequests,
     removeFriend, 
     addNewFriend,
     authUser,
@@ -239,6 +240,18 @@ export function BuddiesView() {
               <span className="w-2 h-2 rounded-full bg-purple-500 animate-ping" />
               <span>Incoming Friend Requests ({incomingRequests.length})</span>
             </h3>
+
+            <button
+              onClick={() => {
+                refreshFriendRequests();
+                sounds.playTap();
+              }}
+              className="text-[11px] font-bold text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-colors"
+              title="Refresh requests"
+            >
+              <span>Refresh</span>
+              <span>🔄</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

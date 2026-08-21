@@ -23,6 +23,8 @@ import {
   generateFriendCode,
   formatFriendCode,
   sendFriendRequestToCloud,
+  subscribeToIncomingFriendRequests,
+  subscribeToSentFriendRequests,
   fetchIncomingRequestsFromCloud,
   updateFriendRequestStatusInCloud 
 } from '@/lib/firebase';
@@ -84,6 +86,7 @@ interface AppContextType {
   acceptFriendRequest: (requestId: string) => void;
   declineFriendRequest: (requestId: string) => void;
   cancelSentRequest: (requestId: string) => void;
+  refreshFriendRequests: () => Promise<void>;
   handleGoogleSignIn: () => Promise<void>;
   handleSignOut: () => Promise<void>;
   connectFriendByCode: (code: string) => Promise<boolean>;
@@ -160,25 +163,71 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsLoaded(true);
   }, []);
 
-  // Poll cloud for incoming requests if user has friendCode
+  // Real-time listener for incoming & sent friend requests
   useEffect(() => {
     if (!isLoaded || !friendCode) return;
-    fetchIncomingRequestsFromCloud(friendCode).then((reqs) => {
-      if (reqs && reqs.length > 0) {
-        setIncomingRequests((prev) => {
-          const ids = new Set(prev.map(r => r.id));
-          const newItems = (reqs as unknown as FriendRequest[]).filter(r => !ids.has(r.id));
-          if (newItems.length > 0) {
-            const merged = [...prev, ...newItems];
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('pathly_incoming_requests_v2', JSON.stringify(merged));
-            }
-            return merged;
-          }
-          return prev;
+
+    // 1. Subscribe to incoming requests in real-time from Firestore
+    const unsubIncoming = subscribeToIncomingFriendRequests(friendCode, (reqs) => {
+      const mapped = reqs as unknown as FriendRequest[];
+      setIncomingRequests(mapped);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('pathly_incoming_requests_v2', JSON.stringify(mapped));
+      }
+    });
+
+    // 2. Subscribe to sent requests status updates in real-time
+    const unsubSent = subscribeToSentFriendRequests(friendCode, (reqs) => {
+      const mapped = reqs as unknown as FriendRequest[];
+      setSentRequests(mapped.filter(r => r.status === 'pending'));
+
+      // If a recipient accepted our sent request, automatically add them to squad!
+      const acceptedReqs = mapped.filter(r => r.status === 'accepted');
+      if (acceptedReqs.length > 0) {
+        acceptedReqs.forEach(async (req) => {
+          const buddy = await lookupFriendByCode(req.toTag);
+          const newBuddy: FriendBuddy = {
+            id: buddy.id,
+            name: buddy.name || req.toTag,
+            avatarId: buddy.avatarId || 'sprout',
+            photoURL: buddy.photoURL || null,
+            tagline: req.toTag,
+            currentLevel: buddy.level || 1,
+            streak: buddy.streak || 0,
+            bestStreak: buddy.bestStreak || 0,
+            todayMinutes: buddy.todayMinutes || 0,
+            todayTargetMinutes: 60,
+            todayGoalTitle: buddy.todayGoalTitle || 'Daily Habits',
+            totalMilestonesCompleted: buddy.totalMilestonesCompleted || 0,
+            totalMilestonesCount: buddy.totalMilestonesCount || 0,
+            activeGoals: buddy.activeGoals || [],
+            completedMilestonesToday: 0,
+            recentCheers: [],
+            isUserAdded: true,
+          };
+
+          setFriends(prev => {
+            const exists = prev.some(f => f.id === newBuddy.id || f.tagline.toLowerCase() === newBuddy.tagline.toLowerCase());
+            if (exists) return prev;
+            const updated = [newBuddy, ...prev];
+            saveStoredFriends(updated);
+            return updated;
+          });
         });
       }
     });
+
+    // 3. Fallback Initial Fetch
+    fetchIncomingRequestsFromCloud(friendCode).then((reqs) => {
+      if (reqs && reqs.length > 0) {
+        setIncomingRequests(reqs as unknown as FriendRequest[]);
+      }
+    });
+
+    return () => {
+      if (unsubIncoming) unsubIncoming();
+      if (unsubSent) unsubSent();
+    };
   }, [friendCode, isLoaded]);
 
   // Save changes
@@ -836,6 +885,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [goals, dailyPlan, profile, friends, focusLogs, badges, authUser, friendCode, isLoaded]);
 
+  const refreshFriendRequests = useCallback(async () => {
+    if (!friendCode) return;
+    const reqs = await fetchIncomingRequestsFromCloud(friendCode);
+    if (reqs) {
+      setIncomingRequests(reqs as unknown as FriendRequest[]);
+    }
+  }, [friendCode]);
+
   return (
     <AppContext.Provider
       value={{
@@ -855,6 +912,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         acceptFriendRequest,
         declineFriendRequest,
         cancelSentRequest,
+        refreshFriendRequests,
         handleGoogleSignIn,
         handleSignOut,
         connectFriendByCode,
