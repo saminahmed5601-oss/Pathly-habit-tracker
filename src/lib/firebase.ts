@@ -136,6 +136,7 @@ export async function saveUserDataToFirestore(userId: string, data: Record<strin
           uid: userId,
           name: profile.name || 'Pathly Explorer',
           avatarId: profile.avatarId || 'sprout',
+          photoURL: (data.photoURL as string) || null,
           streak: profile.streakDays || 0,
           level: profile.level || 1,
           todayMinutes: data.todayFocusMinutes || 0,
@@ -181,6 +182,7 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
   id: string;
   name: string;
   avatarId: string;
+  photoURL?: string | null;
   streak: number;
   level: number;
   todayMinutes: number;
@@ -193,6 +195,7 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
     id: `f-${cleanId}`,
     name: code,
     avatarId: 'sprout',
+    photoURL: null,
     streak: 0,
     level: 1,
     todayMinutes: 0,
@@ -212,6 +215,7 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
             id: d.uid || defaultBuddy.id,
             name: d.name || code,
             avatarId: d.avatarId || 'sprout',
+            photoURL: d.photoURL || null,
             streak: d.streak || 0,
             level: d.level || 1,
             todayMinutes: d.todayMinutes || 0,
@@ -225,7 +229,7 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
     })();
 
     // Max 1-second timeout so UI never hangs if Firestore is not enabled/offline
-    const timeoutPromise = new Promise<{ id: string; name: string; avatarId: string; streak: number; level: number; todayMinutes: number; todayGoalTitle: string }>((resolve) =>
+    const timeoutPromise = new Promise<{ id: string; name: string; avatarId: string; photoURL?: string | null; streak: number; level: number; todayMinutes: number; todayGoalTitle: string }>((resolve) =>
       setTimeout(() => resolve(defaultBuddy), 1000)
     );
 

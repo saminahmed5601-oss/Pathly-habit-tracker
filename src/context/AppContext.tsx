@@ -621,6 +621,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: buddy.id || `f-${Date.now()}`,
       name: buddy.name || cleanCode,
       avatarId: buddy.avatarId || 'sprout',
+      photoURL: buddy.photoURL || null,
       tagline: 'Connected Squad Buddy 🚀',
       currentLevel: buddy.level || 1,
       streak: buddy.streak || 0,
@@ -674,6 +675,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         focusLogs,
         badges,
         friendCode,
+        photoURL: authUser.photoURL,
       });
     }
   }, [goals, dailyPlan, profile, friends, focusLogs, badges, authUser, friendCode, isLoaded]);

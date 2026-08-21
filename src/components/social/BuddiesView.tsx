@@ -2,8 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { AVATAR_OPTIONS } from '@/lib/constants';
-import { Flame, Heart, Copy, Check, UserPlus, Trash2, Plus, X, Edit3 } from 'lucide-react';
+import { Flame, Heart, Copy, Check, UserPlus, Trash2, Plus, X, Edit3, User } from 'lucide-react';
 import { sounds } from '@/lib/sounds';
 
 export function BuddiesView() {
@@ -14,7 +13,9 @@ export function BuddiesView() {
     updateCustomFriendCode, 
     connectFriendByCode, 
     removeFriend, 
-    addNewFriend 
+    addNewFriend,
+    authUser,
+    profile 
   } = useApp();
 
   const [friendCodeInput, setFriendCodeInput] = useState('');
@@ -32,7 +33,6 @@ export function BuddiesView() {
   const [customName, setCustomName] = useState('');
   const [customTagline, setCustomTagline] = useState('Learning & Building Every Day 🔥');
   const [customGoalTitle, setCustomGoalTitle] = useState('Daily Goals');
-  const [customAvatarId, setCustomAvatarId] = useState(AVATAR_OPTIONS[0].id);
 
   const CHEER_EMOJIS = [
     { emoji: '🔥', label: 'Fire' },
@@ -86,7 +86,7 @@ export function BuddiesView() {
 
     addNewFriend({
       name: customName.trim(),
-      avatarId: customAvatarId,
+      avatarId: 'sprout',
       tagline: customTagline.trim() || 'Accountability Partner',
       todayGoalTitle: customGoalTitle.trim() || 'Daily Habits',
     });
@@ -99,71 +99,91 @@ export function BuddiesView() {
   return (
     <div className="space-y-4 sm:space-y-6">
       
-      {/* Header & Customizable Friend Code Bar */}
+      {/* Header & Customizable Profile + Friend Code Bar */}
       <div className="clean-card p-4 sm:p-5 bg-[var(--bg-card)] border border-[var(--border)] flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">
-            Your Personal Friend Tag
-          </div>
-
-          {isEditingCode ? (
-            <form onSubmit={handleSaveCustomCode} className="flex flex-wrap items-center gap-1.5 mt-1.5">
-              <span className="font-mono text-xs sm:text-sm font-bold text-[var(--primary)]">#pathly-</span>
-              <input
-                type="text"
-                autoFocus
-                required
-                value={editHandleInput}
-                onChange={(e) => setEditHandleInput(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
-                placeholder="yourname"
-                className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-[var(--bg-card-subtle)] border border-[var(--primary)] text-[var(--text-main)] w-32 focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="px-2.5 py-1 rounded-lg bg-[var(--primary)] text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsEditingCode(false)}
-                className="px-2 py-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs font-medium"
-              >
-                Cancel
-              </button>
-            </form>
+        
+        {/* Left: User Profile Picture & Tag */}
+        <div className="flex items-center gap-3">
+          {authUser?.photoURL ? (
+            <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-[var(--primary)] shrink-0 shadow-xs">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={authUser.photoURL} alt={authUser.displayName || 'You'} className="w-full h-full object-cover" />
+            </div>
           ) : (
-            <div className="flex items-center gap-2 mt-1">
-              <span className="font-mono text-base sm:text-lg font-black text-[var(--primary)]">
-                {friendCode}
-              </span>
-
-              <button
-                onClick={() => {
-                  const raw = friendCode.replace('#pathly-', '').replace('pathly-', '').replace('#', '');
-                  setEditHandleInput(raw);
-                  setIsEditingCode(true);
-                }}
-                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--primary)] hover:bg-[var(--primary-light)] text-xs font-bold flex items-center gap-1 transition-colors active:scale-95"
-                title="Change your tag (e.g. #pathly-mahin)"
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span className="text-[10px] hidden sm:inline">Set Tag</span>
-              </button>
-
-              <button
-                onClick={handleCopyMyCode}
-                className="px-2.5 py-1.5 rounded-lg bg-[var(--primary-light)] text-[var(--primary-text)] hover:opacity-80 text-xs font-bold flex items-center gap-1 transition-opacity active:scale-95"
-              >
-                {copiedMyCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedMyCode ? 'Copied' : 'Copy'}</span>
-              </button>
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 text-white font-black flex items-center justify-center text-lg shrink-0 shadow-xs select-none">
+              {(authUser?.displayName || profile.name || 'M').charAt(0).toUpperCase()}
             </div>
           )}
+
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-black text-[var(--text-main)]">
+                {authUser?.displayName || profile.name}
+              </span>
+              <span className="text-[9px] font-bold text-[var(--primary)] bg-[var(--primary-light)] px-1.5 py-0.2 rounded">
+                You
+              </span>
+            </div>
+
+            {isEditingCode ? (
+              <form onSubmit={handleSaveCustomCode} className="flex flex-wrap items-center gap-1.5 mt-1">
+                <span className="font-mono text-xs font-bold text-[var(--primary)]">#pathly-</span>
+                <input
+                  type="text"
+                  autoFocus
+                  required
+                  value={editHandleInput}
+                  onChange={(e) => setEditHandleInput(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                  placeholder="yourname"
+                  className="px-2 py-0.5 rounded-lg text-xs font-mono font-bold bg-[var(--bg-card-subtle)] border border-[var(--primary)] text-[var(--text-main)] w-28 focus:outline-none"
+                />
+                <button
+                  type="submit"
+                  className="px-2 py-0.5 rounded-lg bg-[var(--primary)] text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsEditingCode(false)}
+                  className="px-1.5 py-0.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs font-medium"
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="font-mono text-sm sm:text-base font-black text-[var(--primary)]">
+                  {friendCode}
+                </span>
+
+                <button
+                  onClick={() => {
+                    const raw = friendCode.replace('#pathly-', '').replace('pathly-', '').replace('#', '');
+                    setEditHandleInput(raw);
+                    setIsEditingCode(true);
+                  }}
+                  className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--primary)] hover:bg-[var(--primary-light)] text-xs font-bold flex items-center gap-1 transition-colors active:scale-95"
+                  title="Change your tag (e.g. #pathly-mahin)"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span className="text-[10px] hidden sm:inline">Set Tag</span>
+                </button>
+
+                <button
+                  onClick={handleCopyMyCode}
+                  className="px-2 py-1 rounded-lg bg-[var(--primary-light)] text-[var(--primary-text)] hover:opacity-80 text-xs font-bold flex items-center gap-1 transition-opacity active:scale-95"
+                >
+                  {copiedMyCode ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                  <span className="text-[11px]">{copiedMyCode ? 'Copied' : 'Copy'}</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Connect Friend Form */}
-        <form onSubmit={handleConnectByCode} className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full md:max-w-md">
+        {/* Right: Connect Friend Form */}
+        <form onSubmit={handleConnectByCode} className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full md:max-w-sm">
           <input
             type="text"
             required
@@ -173,15 +193,15 @@ export function BuddiesView() {
               if (connectError) setConnectError('');
             }}
             placeholder="Friend's Tag (e.g. #pathly-alex)..."
-            className="flex-1 min-w-[160px] px-3.5 py-2.5 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none font-mono"
+            className="flex-1 min-w-[150px] px-3 py-2 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none font-mono"
           />
           <button
             type="submit"
             disabled={isConnecting || !friendCodeInput.trim()}
-            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-purple-600 hover:opacity-90 active:scale-98 disabled:opacity-40 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0"
+            className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-purple-600 hover:opacity-90 active:scale-98 disabled:opacity-40 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0"
           >
             <UserPlus className="w-3.5 h-3.5" />
-            <span>{isConnecting ? 'Connecting...' : 'Connect Buddy'}</span>
+            <span>{isConnecting ? 'Adding...' : 'Connect'}</span>
           </button>
         </form>
       </div>
@@ -220,8 +240,9 @@ export function BuddiesView() {
       {showAddCustom && (
         <form onSubmit={handleCreateCustomBuddy} className="clean-card p-4 sm:p-5 bg-[var(--bg-card)] border border-purple-500/40 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-xs sm:text-sm font-bold text-[var(--text-main)]">
-              Add a Friend or Study Partner
+            <h3 className="text-xs sm:text-sm font-bold text-[var(--text-main)] flex items-center gap-1.5">
+              <User className="w-4 h-4 text-purple-500" />
+              <span>Add Friend / Study Partner</span>
             </h3>
             <button 
               type="button" 
@@ -254,27 +275,6 @@ export function BuddiesView() {
                 placeholder="e.g. Daily Habits & Coding"
                 className="w-full px-3 py-2 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] focus:outline-none"
               />
-            </div>
-          </div>
-
-          {/* Avatar Selector */}
-          <div>
-            <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1.5">Pick Avatar</label>
-            <div className="flex items-center gap-2">
-              {AVATAR_OPTIONS.map((a) => (
-                <button
-                  type="button"
-                  key={a.id}
-                  onClick={() => setCustomAvatarId(a.id)}
-                  className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg border transition-all ${
-                    customAvatarId === a.id
-                      ? 'border-purple-500 bg-purple-500/10 scale-110 shadow-xs'
-                      : 'border-[var(--border)] bg-[var(--bg-card-subtle)]'
-                  }`}
-                >
-                  {a.emoji}
-                </button>
-              ))}
             </div>
           </div>
 
@@ -318,8 +318,8 @@ export function BuddiesView() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
           {friends.map((friend) => {
-            const avatarMeta = AVATAR_OPTIONS.find(a => a.id === friend.avatarId) || AVATAR_OPTIONS[0];
             const progressPercent = Math.min(100, Math.round((friend.todayMinutes / (friend.todayTargetMinutes || 60)) * 100));
+            const initialLetter = (friend.name.replace('#pathly-', '').replace('pathly-', '').replace('#', '').charAt(0) || 'P').toUpperCase();
 
             return (
               <div
@@ -330,9 +330,19 @@ export function BuddiesView() {
                   {/* Profile row */}
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-xl sm:text-2xl shrink-0">
-                        {avatarMeta.emoji}
-                      </div>
+                      
+                      {/* Real Google Profile Photo or Clean Gradient Letter Avatar */}
+                      {friend.photoURL ? (
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl border border-purple-500/30 overflow-hidden shrink-0 bg-purple-500/10 shadow-2xs">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={friend.photoURL} alt={friend.name} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-purple-500 via-indigo-500 to-blue-600 text-white font-black flex items-center justify-center text-base sm:text-lg shadow-2xs shrink-0 select-none">
+                          {initialLetter}
+                        </div>
+                      )}
+
                       <div className="min-w-0 flex-1">
                         <div className="text-xs sm:text-sm font-bold text-[var(--text-main)] flex items-center gap-1.5 truncate">
                           <span className="truncate">{friend.name}</span>

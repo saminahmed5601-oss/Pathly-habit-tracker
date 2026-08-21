@@ -97,6 +97,7 @@ export interface FriendBuddy {
   id: string;
   name: string;
   avatarId: string;
+  photoURL?: string | null;
   tagline: string;
   currentLevel: number;
   streak: number;
