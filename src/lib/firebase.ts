@@ -76,6 +76,8 @@ export function initFirebase(config?: FirebaseConfigType | null): boolean {
     auth = getAuth(app);
     db = getFirestore(app);
     googleProvider = new GoogleAuthProvider();
+    googleProvider.addScope('email');
+    googleProvider.addScope('profile');
     googleProvider.setCustomParameters({ prompt: 'select_account' });
     return true;
   } catch (err) {
