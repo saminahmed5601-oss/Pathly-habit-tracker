@@ -597,6 +597,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       sounds.playLevelUp();
     } catch (err) {
       console.error('Google Sign In Error:', err);
+      throw err;
     }
   }, [goals, dailyPlan, profile, friends, focusLogs, badges]);
 

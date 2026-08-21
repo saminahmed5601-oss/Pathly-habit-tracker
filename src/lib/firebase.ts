@@ -1,11 +1,9 @@
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, FirebaseApp, deleteApp } from 'firebase/app';
 import { 
   getAuth, 
   GoogleAuthProvider, 
   signInWithPopup, 
   signOut as firebaseSignOut, 
-  onAuthStateChanged, 
-  User,
   Auth 
 } from 'firebase/auth';
 import { 
@@ -27,6 +25,7 @@ export interface FirebaseConfigType {
   storageBucket?: string;
   messagingSenderId?: string;
   appId?: string;
+  measurementId?: string;
 }
 
 export function getActiveFirebaseConfig(): FirebaseConfigType | null {
@@ -44,7 +43,7 @@ export function getActiveFirebaseConfig(): FirebaseConfigType | null {
   } catch {}
 
   // 2. Check environment variables
-  if (process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+  if (process.env.NEXT_PUBLIC_FIREBASE_API_KEY && process.env.NEXT_PUBLIC_FIREBASE_API_KEY !== 'demo-api-key') {
     return {
       apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
       authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
@@ -52,6 +51,7 @@ export function getActiveFirebaseConfig(): FirebaseConfigType | null {
       storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
       messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
       appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+      measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
     };
   }
 
@@ -63,7 +63,7 @@ let auth: Auth | null = null;
 let db: Firestore | null = null;
 let googleProvider: GoogleAuthProvider | null = null;
 
-export function initFirebase(config?: FirebaseConfigType | null) {
+export function initFirebase(config?: FirebaseConfigType | null): boolean {
   const activeConfig = config || getActiveFirebaseConfig();
   if (!activeConfig || typeof window === 'undefined') return false;
 
@@ -125,13 +125,25 @@ export async function loginWithGoogle(): Promise<AuthUserProfile> {
   } catch (err: unknown) {
     console.error('Google Sign In Popup Error:', err);
     const firebaseErr = err as { code?: string; message?: string };
-    if (firebaseErr.code === 'auth/popup-closed-by-user') {
-      throw new Error('POPUP_CLOSED');
+    
+    if (firebaseErr.code === 'auth/operation-not-allowed') {
+      throw new Error('Google Sign-In is not enabled yet in your Firebase Console. Go to Security > Authentication > Sign-in method > Enable Google.');
     }
     if (firebaseErr.code === 'auth/unauthorized-domain') {
-      throw new Error('UNAUTHORIZED_DOMAIN');
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+      throw new Error(`Domain "${currentHost}" is not authorized. In Firebase Console, go to Authentication > Settings > Authorized Domains and add "${currentHost}".`);
     }
-    throw new Error(firebaseErr.message || 'SIGN_IN_FAILED');
+    if (firebaseErr.code === 'auth/popup-blocked') {
+      throw new Error('The popup was blocked by your browser. Please allow popups for this site.');
+    }
+    if (firebaseErr.code === 'auth/popup-closed-by-user') {
+      throw new Error('Popup was closed before completing sign-in.');
+    }
+    if (firebaseErr.code === 'auth/invalid-api-key') {
+      throw new Error('Invalid Firebase API key. Please check your .env.local or Firebase config.');
+    }
+    
+    throw new Error(firebaseErr.message || 'Google sign-in failed. Please check your Firebase settings.');
   }
 }
 
