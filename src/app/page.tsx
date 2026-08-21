@@ -14,6 +14,7 @@ import { EveningReflectionModal } from '@/components/evening/EveningReflectionMo
 import { ShareProgressCardModal } from '@/components/social/ShareProgressCardModal';
 import { AntiCheatModal } from '@/components/anticheat/AntiCheatModal';
 import { HelpGuideModal } from '@/components/help/HelpGuideModal';
+import { AuthModal } from '@/components/auth/AuthModal';
 
 export default function HomePage() {
   const { isLoaded } = useApp();
@@ -27,22 +28,23 @@ export default function HomePage() {
   const [showEvening, setShowEvening] = useState(false);
   const [showShareCard, setShowShareCard] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
 
   if (!isLoaded) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC] dark:bg-[#0B0F17]">
-        <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center text-xl animate-bounce">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--bg-page)] text-[var(--text-main)]">
+        <div className="w-10 h-10 rounded-xl bg-[var(--primary-light)] text-[var(--primary)] flex items-center justify-center text-xl animate-bounce">
           🌱
         </div>
-        <p className="text-xs font-bold text-slate-400 mt-2">Loading Pathly...</p>
+        <p className="text-xs font-bold text-[var(--text-muted)] mt-2">Loading Pathly...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8FAFC] dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 transition-colors">
+    <div className="min-h-screen flex flex-col bg-[var(--bg-page)] text-[var(--text-main)] transition-colors">
       
-      {/* Clean Navbar with Tabs */}
+      {/* Clean Navbar with Tabs & Auth */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -51,6 +53,7 @@ export default function HomePage() {
         onOpenNewGoal={() => setShowNewGoal(true)}
         onOpenShareCard={() => setShowShareCard(true)}
         onOpenHelp={() => setShowHelp(true)}
+        onOpenAuth={() => setShowAuth(true)}
       />
 
       {/* Main Tabbed Content Area */}
@@ -80,20 +83,20 @@ export default function HomePage() {
         )}
       </main>
 
-      {/* Clean, Minimal Footer */}
-      <footer className="w-full border-t border-slate-200/80 dark:border-slate-800/80 py-5 text-center text-xs text-slate-400">
+      {/* Clean Minimal Footer */}
+      <footer className="w-full border-t border-[var(--border)] py-5 text-center text-xs text-[var(--text-muted)]">
         <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 font-medium">
             <span>🌱</span>
-            <span className="font-bold text-slate-700 dark:text-slate-300">Pathly</span>
+            <span className="font-bold text-[var(--text-main)]">Pathly</span>
             <span>— Simple Daily Progress, Genuine Discipline</span>
           </div>
 
           <div className="flex items-center gap-4 text-xs font-semibold">
-            <button onClick={() => setActiveTab('today')} className="hover:text-emerald-600 transition-colors">Today</button>
-            <button onClick={() => setActiveTab('milestones')} className="hover:text-emerald-600 transition-colors">Milestones</button>
-            <button onClick={() => setActiveTab('friends')} className="hover:text-emerald-600 transition-colors">Buddies</button>
-            <button onClick={() => setShowHelp(true)} className="hover:text-emerald-600 transition-colors">Psychology Guide</button>
+            <button onClick={() => setActiveTab('today')} className="hover:text-[var(--primary)] transition-colors">Today</button>
+            <button onClick={() => setActiveTab('milestones')} className="hover:text-[var(--primary)] transition-colors">Milestones</button>
+            <button onClick={() => setActiveTab('friends')} className="hover:text-[var(--primary)] transition-colors">Buddies</button>
+            <button onClick={() => setShowAuth(true)} className="hover:text-[var(--primary)] transition-colors">Cloud Sync</button>
           </div>
         </div>
       </footer>
@@ -129,6 +132,11 @@ export default function HomePage() {
       <HelpGuideModal
         isOpen={showHelp}
         onClose={() => setShowHelp(false)}
+      />
+
+      <AuthModal
+        isOpen={showAuth}
+        onClose={() => setShowAuth(false)}
       />
 
     </div>

@@ -13,6 +13,15 @@ import {
 } from '@/lib/storage';
 import { INITIAL_GOALS, INITIAL_DAILY_PLAN, INITIAL_USER_PROFILE, INITIAL_FRIENDS, DEFAULT_BADGES } from '@/lib/constants';
 import { sounds } from '@/lib/sounds';
+import { 
+  loginWithGoogle, 
+  logoutUser, 
+  saveUserDataToFirestore, 
+  loadUserDataFromFirestore, 
+  lookupFriendByCode, 
+  AuthUserProfile, 
+  generateFriendCode 
+} from '@/lib/firebase';
 
 interface MilestoneCompletionPayload {
   goalId: string;
@@ -61,7 +70,12 @@ interface AppContextType {
   // Focus Sessions
   recordFocusSession: (data: { durationMinutes: number; goalId?: string; taskTitle: string; notes?: string }) => void;
 
-  // Social Accountability
+  // Social & Cloud Sync
+  authUser: AuthUserProfile | null;
+  friendCode: string;
+  handleGoogleSignIn: () => Promise<void>;
+  handleSignOut: () => Promise<void>;
+  connectFriendByCode: (code: string) => Promise<boolean>;
   sendCheer: (friendId: string, emoji: string, label: string) => void;
   addNewFriend: (data: { name: string; avatarId: string; tagline: string; todayGoalTitle: string }) => void;
 
@@ -86,6 +100,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [focusLogs, setFocusLogs] = useState<FocusSessionLog[]>([]);
   const [badges, setBadges] = useState<Badge[]>(DEFAULT_BADGES);
 
+  // Authentication & Cloud Sync
+  const [authUser, setAuthUser] = useState<AuthUserProfile | null>(null);
+  const [friendCode, setFriendCode] = useState<string>('PATH-7821');
+
   // Anti-cheat state tracking
   const [lastMilestoneCompletedTime, setLastMilestoneCompletedTime] = useState<number | null>(null);
   const [antiCheatModalTarget, setAntiCheatModalTarget] = useState<{ goalId: string; milestone: MilestoneItem } | null>(null);
@@ -100,6 +118,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setFriends(getStoredFriends());
     setFocusLogs(getStoredFocusLogs());
     setBadges(getStoredBadges());
+
+    // Restore cached auth user if present
+    try {
+      const cachedAuth = localStorage.getItem('pathly_auth_user');
+      if (cachedAuth) {
+        const parsed = JSON.parse(cachedAuth);
+        setAuthUser(parsed);
+        setFriendCode(parsed.friendCode || generateFriendCode(parsed.uid));
+      } else {
+        const localCode = localStorage.getItem('pathly_friend_code') || generateFriendCode('local_user');
+        setFriendCode(localCode);
+        localStorage.setItem('pathly_friend_code', localCode);
+      }
+    } catch {
+      // ignore
+    }
+
     setIsLoaded(true);
   }, []);
 
@@ -527,6 +562,96 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     sounds.playTap();
   }, []);
 
+  // Google Authentication & Cloud Sync
+  const handleGoogleSignIn = useCallback(async () => {
+    try {
+      const user = await loginWithGoogle();
+      setAuthUser(user);
+      setFriendCode(user.friendCode);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('pathly_auth_user', JSON.stringify(user));
+        localStorage.setItem('pathly_friend_code', user.friendCode);
+      }
+
+      // Check if user has existing cloud data
+      const cloudData = await loadUserDataFromFirestore(user.uid);
+      if (cloudData) {
+        if (cloudData.goals) setGoals(cloudData.goals as Goal[]);
+        if (cloudData.dailyPlan) setDailyPlan(cloudData.dailyPlan as DailyPlan);
+        if (cloudData.profile) setProfile(cloudData.profile as UserProfile);
+        if (cloudData.friends) setFriends(cloudData.friends as FriendBuddy[]);
+        if (cloudData.focusLogs) setFocusLogs(cloudData.focusLogs as FocusSessionLog[]);
+        if (cloudData.badges) setBadges(cloudData.badges as Badge[]);
+      } else {
+        // First time cloud sync: migrate local state to Firestore
+        saveUserDataToFirestore(user.uid, {
+          goals,
+          dailyPlan,
+          profile,
+          friends,
+          focusLogs,
+          badges,
+          friendCode: user.friendCode,
+        });
+      }
+      sounds.playLevelUp();
+    } catch (err) {
+      console.error('Google Sign In Error:', err);
+    }
+  }, [goals, dailyPlan, profile, friends, focusLogs, badges]);
+
+  const handleSignOut = useCallback(async () => {
+    await logoutUser();
+    setAuthUser(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('pathly_auth_user');
+    }
+  }, []);
+
+  const connectFriendByCode = useCallback(async (code: string): Promise<boolean> => {
+    const buddy = await lookupFriendByCode(code);
+    if (!buddy) return false;
+
+    const newFriend: FriendBuddy = {
+      id: buddy.id,
+      name: buddy.name,
+      avatarId: buddy.avatarId,
+      tagline: 'Connected via Friend Code 🚀',
+      currentLevel: buddy.level,
+      streak: buddy.streak,
+      todayMinutes: buddy.todayMinutes,
+      todayTargetMinutes: 60,
+      todayGoalTitle: buddy.todayGoalTitle,
+      completedMilestonesToday: 1,
+      recentCheers: [],
+      isUserAdded: true,
+    };
+
+    setFriends(prev => {
+      const exists = prev.some(f => f.name.toLowerCase() === buddy.name.toLowerCase() || f.id === buddy.id);
+      if (exists) return prev;
+      return [newFriend, ...prev];
+    });
+
+    sounds.playTaskPop();
+    return true;
+  }, []);
+
+  // Auto-sync state changes to cloud if user is signed in
+  useEffect(() => {
+    if (isLoaded && authUser) {
+      saveUserDataToFirestore(authUser.uid, {
+        goals,
+        dailyPlan,
+        profile,
+        friends,
+        focusLogs,
+        badges,
+        friendCode,
+      });
+    }
+  }, [goals, dailyPlan, profile, friends, focusLogs, badges, authUser, friendCode, isLoaded]);
+
   return (
     <AppContext.Provider
       value={{
@@ -537,6 +662,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         friends,
         focusLogs,
         badges,
+        authUser,
+        friendCode,
+        handleGoogleSignIn,
+        handleSignOut,
+        connectFriendByCode,
         lastMilestoneCompletedTime,
         antiCheatModalTarget,
         setAntiCheatModalTarget,

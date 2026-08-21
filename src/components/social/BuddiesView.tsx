@@ -3,14 +3,15 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { AVATAR_OPTIONS } from '@/lib/constants';
-import { Flame, Plus, Heart, Sparkles } from 'lucide-react';
+import { Flame, Plus, Heart, Copy, Check, QrCode, UserPlus } from 'lucide-react';
+import { sounds } from '@/lib/sounds';
 
 export function BuddiesView() {
-  const { friends, sendCheer, addNewFriend } = useApp();
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [name, setName] = useState('');
-  const [goal, setGoal] = useState('');
-  const [avatar, setAvatar] = useState('fox');
+  const { friends, sendCheer, friendCode, connectFriendByCode } = useApp();
+  const [friendCodeInput, setFriendCodeInput] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectError, setConnectError] = useState('');
+  const [copiedMyCode, setCopiedMyCode] = useState(false);
 
   const CHEER_EMOJIS = [
     { emoji: '🔥', label: 'Fire' },
@@ -19,44 +20,87 @@ export function BuddiesView() {
     { emoji: '💪', label: 'Power' },
   ];
 
-  const handleAddSubmit = (e: React.FormEvent) => {
+  const handleCopyMyCode = () => {
+    navigator.clipboard.writeText(friendCode);
+    setCopiedMyCode(true);
+    sounds.playTaskPop();
+    setTimeout(() => setCopiedMyCode(false), 2000);
+  };
+
+  const handleConnectByCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!friendCodeInput.trim()) return;
 
-    addNewFriend({
-      name: name.trim(),
-      avatarId: avatar,
-      tagline: 'Studying & building daily! ✨',
-      todayGoalTitle: goal.trim() || 'Finish Daily Goals',
-    });
-
-    setShowAddModal(false);
-    setName('');
-    setGoal('');
+    try {
+      setIsConnecting(true);
+      setConnectError('');
+      const success = await connectFriendByCode(friendCodeInput.trim());
+      if (success) {
+        setFriendCodeInput('');
+      } else {
+        setConnectError('Could not find friend with this code.');
+      }
+    } catch {
+      setConnectError('Error connecting to friend.');
+    } finally {
+      setIsConnecting(false);
+    }
   };
 
   return (
     <div className="space-y-6">
       
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header & Friend Code Bar */}
+      <div className="clean-card p-5 bg-[var(--bg-card)] border border-[var(--border)] flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-[var(--text-main)]">
-            Accountability Buddies
-          </h1>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5">
-            Share progress and exchange 1-tap energy boosts
-          </p>
+          <div className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">
+            Your Personal Friend Code
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="font-mono text-base sm:text-lg font-black text-[var(--primary)]">
+              {friendCode}
+            </span>
+            <button
+              onClick={handleCopyMyCode}
+              className="px-2.5 py-1 rounded-lg bg-[var(--primary-light)] text-[var(--primary-text)] hover:opacity-80 text-xs font-bold flex items-center gap-1 transition-opacity"
+            >
+              {copiedMyCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedMyCode ? 'Copied' : 'Copy Code'}</span>
+            </button>
+          </div>
         </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-purple-600 hover:opacity-90 text-white font-bold text-xs sm:text-sm shadow-xs transition-opacity self-start sm:self-center"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Buddy</span>
-        </button>
+        {/* Connect Friend by Code Input */}
+        <form onSubmit={handleConnectByCode} className="flex items-center gap-2 max-w-md w-full">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              required
+              value={friendCodeInput}
+              onChange={(e) => {
+                setFriendCodeInput(e.target.value);
+                if (connectError) setConnectError('');
+              }}
+              placeholder="Enter Friend's Code (e.g. PATH-MAYA)..."
+              className="w-full px-3.5 py-2 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none uppercase font-mono"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isConnecting || !friendCodeInput.trim()}
+            className="px-4 py-2 rounded-xl bg-purple-600 hover:opacity-90 disabled:opacity-40 text-white font-bold text-xs shadow-xs transition-opacity flex items-center gap-1.5 shrink-0"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>{isConnecting ? 'Adding...' : 'Connect Buddy'}</span>
+          </button>
+        </form>
       </div>
+
+      {connectError && (
+        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 font-bold">
+          {connectError}
+        </div>
+      )}
 
       {/* Friends Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -73,7 +117,7 @@ export function BuddiesView() {
                 {/* Profile row */}
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-2xl">
+                    <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-2xl shrink-0">
                       {avatarMeta.emoji}
                     </div>
                     <div>
@@ -83,7 +127,7 @@ export function BuddiesView() {
                           Lv.{friend.currentLevel}
                         </span>
                       </div>
-                      <p className="text-xs text-[var(--text-muted)] truncate max-w-[160px]">
+                      <p className="text-xs text-[var(--text-muted)] truncate max-w-[150px]">
                         {friend.tagline}
                       </p>
                     </div>
@@ -120,7 +164,7 @@ export function BuddiesView() {
                 )}
               </div>
 
-              {/* 1-Tap Cheer Buttons */}
+              {/* 1-Tap Cheer Boost Buttons */}
               <div className="pt-3 border-t border-[var(--border)]">
                 <div className="grid grid-cols-4 gap-1.5">
                   {CHEER_EMOJIS.map((c) => (
@@ -140,85 +184,6 @@ export function BuddiesView() {
           );
         })}
       </div>
-
-      {/* Add Buddy Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="relative w-full max-w-sm clean-card p-6 bg-[var(--bg-card)] border border-[var(--border)] shadow-2xl">
-            <h3 className="text-base font-bold text-[var(--text-main)] mb-1">
-              Add Buddy
-            </h3>
-            <p className="text-xs text-[var(--text-muted)] mb-4">
-              Add a friend to share progress and keep streaks alive
-            </p>
-
-            <form onSubmit={handleAddSubmit} className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-main)] mb-1">
-                  Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Maya Chen"
-                  className="w-full px-3 py-2 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-main)] mb-1">
-                  Avatar Pet
-                </label>
-                <div className="flex gap-2">
-                  {AVATAR_OPTIONS.map((a) => (
-                    <button
-                      type="button"
-                      key={a.id}
-                      onClick={() => setAvatar(a.id)}
-                      className={`w-9 h-9 rounded-xl text-lg flex items-center justify-center transition-all ${
-                        avatar === a.id ? 'bg-purple-500/20 border-2 border-purple-500 scale-105' : 'bg-[var(--bg-card-subtle)]'
-                      }`}
-                    >
-                      {a.emoji}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[var(--text-main)] mb-1">
-                  Today&apos;s Focus Goal
-                </label>
-                <input
-                  type="text"
-                  value={goal}
-                  onChange={(e) => setGoal(e.target.value)}
-                  placeholder="e.g. Master React Hooks"
-                  className="w-full px-3 py-2 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] focus:outline-none"
-                />
-              </div>
-
-              <div className="pt-2 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 py-2 rounded-xl bg-[var(--bg-card-subtle)] text-[var(--text-main)] font-bold text-xs"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 rounded-xl bg-purple-600 hover:opacity-90 text-white font-bold text-xs shadow-xs"
-                >
-                  Add Buddy
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
     </div>
   );

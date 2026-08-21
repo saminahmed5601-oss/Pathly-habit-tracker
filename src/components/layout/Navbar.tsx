@@ -14,8 +14,8 @@ import {
   Volume2, 
   VolumeX, 
   Share2,
-  HelpCircle,
-  Clock
+  Cloud,
+  CloudCheck
 } from 'lucide-react';
 
 export type TabType = 'today' | 'milestones' | 'friends' | 'achievements';
@@ -28,18 +28,16 @@ interface NavbarProps {
   onOpenNewGoal: () => void;
   onOpenShareCard: () => void;
   onOpenHelp: () => void;
+  onOpenAuth: () => void;
 }
 
 export function Navbar({
   activeTab,
   setActiveTab,
-  onOpenMorning,
-  onOpenFocus,
-  onOpenNewGoal,
   onOpenShareCard,
-  onOpenHelp,
+  onOpenAuth,
 }: NavbarProps) {
-  const { profile, toggleSound, toggleAntiCheat, toggleTheme, isDarkMode } = useApp();
+  const { profile, toggleSound, toggleAntiCheat, toggleTheme, isDarkMode, authUser } = useApp();
   const currentAvatar = AVATAR_OPTIONS.find(a => a.id === profile.avatarId) || AVATAR_OPTIONS[0];
 
   const xpPercent = Math.min(100, Math.round((profile.currentXP / profile.nextLevelXP) * 100));
@@ -48,14 +46,22 @@ export function Navbar({
     <header className="sticky top-0 z-40 w-full bg-[var(--bg-card)] border-b border-[var(--border)] transition-colors">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
         
-        {/* Left: Brand & Avatar */}
+        {/* Left: Brand & Profile */}
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => setActiveTab('today')}
-            className="w-10 h-10 rounded-xl bg-[var(--primary-light)] border border-[var(--primary)] flex items-center justify-center text-xl cursor-pointer hover:scale-105 transition-transform shrink-0"
-            title={`${currentAvatar.name} - Lv. ${profile.level}`}
+            onClick={onOpenAuth}
+            className="relative w-10 h-10 rounded-xl bg-[var(--primary-light)] border border-[var(--primary)] flex items-center justify-center text-xl cursor-pointer hover:scale-105 transition-transform shrink-0 overflow-hidden"
+            title={authUser ? `Signed in as ${authUser.displayName}` : 'Sign in with Google to save progress'}
           >
-            {currentAvatar.emoji}
+            {authUser?.photoURL ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={authUser.photoURL} alt="User" className="w-full h-full object-cover" />
+            ) : (
+              <span>{currentAvatar.emoji}</span>
+            )}
+            {authUser && (
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-white dark:border-slate-900"></span>
+            )}
           </button>
 
           <div>
@@ -134,9 +140,23 @@ export function Navbar({
           </button>
         </nav>
 
-        {/* Right: Quick Controls */}
+        {/* Right: Quick Controls & Cloud Sync Button */}
         <div className="flex items-center gap-1.5 sm:gap-2">
           
+          {/* Cloud Sync Status / Sign In Button */}
+          <button
+            onClick={onOpenAuth}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-bold transition-colors ${
+              authUser
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-[var(--primary)]'
+                : 'bg-blue-500/10 border-blue-500/30 text-blue-500 hover:bg-blue-500/20'
+            }`}
+            title={authUser ? 'Cloud Sync: Active (Safe)' : 'Sign In with Google to protect progress'}
+          >
+            <Cloud className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">{authUser ? 'Synced' : 'Sync / Login'}</span>
+          </button>
+
           {/* Streak Flame */}
           <div 
             className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-500/10 border border-orange-500/30 text-orange-500 text-xs font-bold"
