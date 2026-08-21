@@ -163,7 +163,7 @@ export async function loadUserDataFromFirestore(userId: string): Promise<Record<
   return null;
 }
 
-// Look up friend by Friend Code (Checks Cloud first, then provides clean connection)
+// Look up friend by Friend Code (Timeout-proof & instant)
 export async function lookupFriendByCode(friendCode: string): Promise<{
   id: string;
   name: string;
@@ -176,46 +176,7 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
   const raw = friendCode.trim().toUpperCase();
   const code = raw.startsWith('PATH-') ? raw : `PATH-${raw}`;
 
-  if (db) {
-    try {
-      // 1. Direct O(1) read from public_profiles
-      const publicDocRef = doc(db, 'public_profiles', code);
-      const publicSnap = await getDoc(publicDocRef);
-      if (publicSnap.exists()) {
-        const d = publicSnap.data();
-        return {
-          id: d.uid || `f-${code.toLowerCase()}`,
-          name: d.name || code,
-          avatarId: d.avatarId || 'sprout',
-          streak: d.streak || 0,
-          level: d.level || 1,
-          todayMinutes: d.todayMinutes || 0,
-          todayGoalTitle: d.todayGoalTitle || 'Daily Path',
-        };
-      }
-
-      // 2. Query users collection
-      const q = query(collection(db, 'users'), where('friendCode', '==', code));
-      const querySnap = await getDocs(q);
-      if (!querySnap.empty) {
-        const docData = querySnap.docs[0].data();
-        return {
-          id: docData.uid || querySnap.docs[0].id,
-          name: docData.profile?.name || code,
-          avatarId: docData.profile?.avatarId || 'sprout',
-          streak: docData.profile?.streakDays || 0,
-          level: docData.profile?.level || 1,
-          todayMinutes: docData.todayFocusMinutes || 0,
-          todayGoalTitle: docData.dailyPlan?.priorityTasks?.[0]?.title || 'Daily Path',
-        };
-      }
-    } catch (err) {
-      console.warn('Firestore friend lookup error:', err);
-    }
-  }
-
-  // Graceful connection for any valid entered friend code or buddy
-  return {
+  const defaultBuddy = {
     id: `f-${code.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
     name: code,
     avatarId: 'sprout',
@@ -224,4 +185,39 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
     todayMinutes: 0,
     todayGoalTitle: 'Daily Habits',
   };
+
+  if (!db) return defaultBuddy;
+
+  try {
+    const fetchPromise = (async () => {
+      try {
+        const publicDocRef = doc(db, 'public_profiles', code);
+        const publicSnap = await getDoc(publicDocRef);
+        if (publicSnap.exists()) {
+          const d = publicSnap.data();
+          return {
+            id: d.uid || defaultBuddy.id,
+            name: d.name || code,
+            avatarId: d.avatarId || 'sprout',
+            streak: d.streak || 0,
+            level: d.level || 1,
+            todayMinutes: d.todayMinutes || 0,
+            todayGoalTitle: d.todayGoalTitle || 'Daily Path',
+          };
+        }
+      } catch {
+        // silently fallback
+      }
+      return defaultBuddy;
+    })();
+
+    // Max 1-second timeout so UI never hangs if Firestore is not enabled/offline
+    const timeoutPromise = new Promise<{ id: string; name: string; avatarId: string; streak: number; level: number; todayMinutes: number; todayGoalTitle: string }>((resolve) =>
+      setTimeout(() => resolve(defaultBuddy), 1000)
+    );
+
+    return await Promise.race([fetchPromise, timeoutPromise]);
+  } catch {
+    return defaultBuddy;
+  }
 }

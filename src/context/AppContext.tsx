@@ -611,28 +611,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const connectFriendByCode = useCallback(async (code: string): Promise<boolean> => {
-    const buddy = await lookupFriendByCode(code);
-    if (!buddy) return false;
+    if (!code.trim()) return false;
+    const cleanCode = code.trim().toUpperCase();
+    const buddy = await lookupFriendByCode(cleanCode);
 
     const newFriend: FriendBuddy = {
-      id: buddy.id,
-      name: buddy.name,
-      avatarId: buddy.avatarId,
-      tagline: 'Connected via Friend Code 🚀',
-      currentLevel: buddy.level,
-      streak: buddy.streak,
-      todayMinutes: buddy.todayMinutes,
+      id: buddy.id || `f-${Date.now()}`,
+      name: buddy.name || cleanCode,
+      avatarId: buddy.avatarId || 'sprout',
+      tagline: 'Connected Squad Buddy 🚀',
+      currentLevel: buddy.level || 1,
+      streak: buddy.streak || 0,
+      todayMinutes: buddy.todayMinutes || 0,
       todayTargetMinutes: 60,
-      todayGoalTitle: buddy.todayGoalTitle,
-      completedMilestonesToday: 1,
+      todayGoalTitle: buddy.todayGoalTitle || 'Daily Habits',
+      completedMilestonesToday: 0,
       recentCheers: [],
       isUserAdded: true,
     };
 
     setFriends(prev => {
-      const exists = prev.some(f => f.name.toLowerCase() === buddy.name.toLowerCase() || f.id === buddy.id);
+      const exists = prev.some(f => f.name.toLowerCase() === newFriend.name.toLowerCase() || f.id === newFriend.id);
       if (exists) return prev;
-      return [newFriend, ...prev];
+      const updated = [newFriend, ...prev];
+      saveStoredFriends(updated);
+      return updated;
     });
 
     sounds.playTaskPop();
