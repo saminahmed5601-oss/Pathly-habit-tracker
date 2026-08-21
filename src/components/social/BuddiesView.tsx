@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { Flame, Heart, Copy, Check, UserPlus, Trash2, Plus, X, Edit3, User } from 'lucide-react';
+import { Flame, Heart, Copy, Check, UserPlus, Trash2, Plus, X, Edit3, User, Send, Clock, UserCheck, UserX } from 'lucide-react';
 import { sounds } from '@/lib/sounds';
 
 export function BuddiesView() {
@@ -11,17 +11,22 @@ export function BuddiesView() {
     sendCheer, 
     friendCode, 
     updateCustomFriendCode, 
-    connectFriendByCode, 
+    incomingRequests,
+    sentRequests,
+    sendFriendRequest,
+    acceptFriendRequest,
+    declineFriendRequest,
+    cancelSentRequest,
     removeFriend, 
     addNewFriend,
     authUser,
     profile 
   } = useApp();
 
-  const [friendCodeInput, setFriendCodeInput] = useState('');
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [friendTagInput, setFriendTagInput] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
-  const [connectError, setConnectError] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   const [copiedMyCode, setCopiedMyCode] = useState(false);
 
   // Custom Friend Code Editing State
@@ -57,26 +62,26 @@ export function BuddiesView() {
     setTimeout(() => setSuccessMsg(''), 4000);
   };
 
-  const handleConnectByCode = async (e: React.FormEvent) => {
+  const handleSendRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!friendCodeInput.trim()) return;
+    if (!friendTagInput.trim()) return;
 
     try {
-      setIsConnecting(true);
-      setConnectError('');
+      setIsSending(true);
+      setErrorMsg('');
       setSuccessMsg('');
-      const success = await connectFriendByCode(friendCodeInput.trim());
-      if (success) {
-        setSuccessMsg(`✨ Successfully connected buddy to your squad!`);
-        setFriendCodeInput('');
+      const res = await sendFriendRequest(friendTagInput.trim());
+      if (res.success) {
+        setSuccessMsg(res.message);
+        setFriendTagInput('');
         setTimeout(() => setSuccessMsg(''), 4000);
       } else {
-        setConnectError('Could not connect friend.');
+        setErrorMsg(res.message);
       }
     } catch {
-      setConnectError('Error connecting to friend.');
+      setErrorMsg('Error sending friend request.');
     } finally {
-      setIsConnecting(false);
+      setIsSending(false);
     }
   };
 
@@ -99,7 +104,7 @@ export function BuddiesView() {
   return (
     <div className="space-y-4 sm:space-y-6">
       
-      {/* Header & Customizable Profile + Friend Code Bar */}
+      {/* Header & Customizable Profile + Friend Request Bar */}
       <div className="clean-card p-4 sm:p-5 bg-[var(--bg-card)] border border-[var(--border)] flex flex-col md:flex-row md:items-center justify-between gap-4">
         
         {/* Left: User Profile Picture & Tag */}
@@ -182,26 +187,26 @@ export function BuddiesView() {
           </div>
         </div>
 
-        {/* Right: Connect Friend Form */}
-        <form onSubmit={handleConnectByCode} className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full md:max-w-sm">
+        {/* Right: Send Friend Request Form */}
+        <form onSubmit={handleSendRequest} className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full md:max-w-sm">
           <input
             type="text"
             required
-            value={friendCodeInput}
+            value={friendTagInput}
             onChange={(e) => {
-              setFriendCodeInput(e.target.value);
-              if (connectError) setConnectError('');
+              setFriendTagInput(e.target.value);
+              if (errorMsg) setErrorMsg('');
             }}
             placeholder="Friend's Tag (e.g. #pathly-alex)..."
             className="flex-1 min-w-[150px] px-3 py-2 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none font-mono"
           />
           <button
             type="submit"
-            disabled={isConnecting || !friendCodeInput.trim()}
+            disabled={isSending || !friendTagInput.trim()}
             className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-purple-600 hover:opacity-90 active:scale-98 disabled:opacity-40 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0"
           >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>{isConnecting ? 'Adding...' : 'Connect'}</span>
+            <Send className="w-3.5 h-3.5" />
+            <span>{isSending ? 'Sending...' : 'Send Request'}</span>
           </button>
         </form>
       </div>
@@ -215,9 +220,103 @@ export function BuddiesView() {
       )}
 
       {/* Error Notification */}
-      {connectError && (
+      {errorMsg && (
         <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 font-bold">
-          {connectError}
+          {errorMsg}
+        </div>
+      )}
+
+      {/* 1. Incoming Friend Requests Banner (Actionable) */}
+      {incomingRequests.length > 0 && (
+        <div className="clean-card p-4 sm:p-5 bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-transparent border border-purple-500/30 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs sm:text-sm font-black text-[var(--text-main)] flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-purple-500 animate-ping" />
+              <span>Incoming Friend Requests ({incomingRequests.length})</span>
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {incomingRequests.map((req) => {
+              const initial = (req.fromName.charAt(0) || 'P').toUpperCase();
+              return (
+                <div
+                  key={req.id}
+                  className="p-3 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] flex items-center justify-between gap-3 shadow-2xs"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    {req.fromPhotoURL ? (
+                      <div className="w-10 h-10 rounded-xl overflow-hidden border border-purple-500/30 shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={req.fromPhotoURL} alt={req.fromName} className="w-full h-full object-cover" />
+                      </div>
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white font-black flex items-center justify-center text-sm shrink-0">
+                        {initial}
+                      </div>
+                    )}
+
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-[var(--text-main)] truncate flex items-center gap-1">
+                        <span>{req.fromName}</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-500">
+                          Lv.{req.fromLevel}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-[var(--primary)] truncate block">
+                        {req.fromTag}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => acceptFriendRequest(req.id)}
+                      className="px-3 py-1.5 rounded-lg bg-[var(--primary)] hover:opacity-90 active:scale-95 text-white font-bold text-xs flex items-center gap-1 shadow-xs transition-all"
+                    >
+                      <UserCheck className="w-3.5 h-3.5" />
+                      <span>Accept</span>
+                    </button>
+
+                    <button
+                      onClick={() => declineFriendRequest(req.id)}
+                      className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                      title="Decline"
+                    >
+                      <UserX className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 2. Pending Sent Requests (Pending Confirmation) */}
+      {sentRequests.length > 0 && (
+        <div className="p-3 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)] flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-[var(--text-muted)]">
+            <Clock className="w-3.5 h-3.5 text-amber-500" />
+            <span>Sent Requests Pending ({sentRequests.length}):</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {sentRequests.map((s) => (
+                <span
+                  key={s.id}
+                  className="px-2 py-0.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] font-mono text-[11px] text-[var(--text-main)] inline-flex items-center gap-1"
+                >
+                  {s.toTag}
+                  <button
+                    onClick={() => cancelSentRequest(s.id)}
+                    className="text-[var(--text-muted)] hover:text-red-500 text-xs ml-0.5"
+                    title="Cancel request"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -287,15 +386,15 @@ export function BuddiesView() {
         </form>
       )}
 
-      {/* Friends Grid */}
+      {/* Friends Grid (Only shows accepted buddies) */}
       {friends.length === 0 ? (
         <div className="clean-card p-8 sm:p-12 text-center bg-[var(--bg-card)] border border-[var(--border)]">
           <div className="text-4xl mb-3">👥</div>
           <h2 className="text-sm sm:text-base font-bold text-[var(--text-main)] mb-1">
-            No accountability buddies connected yet
+            No connected buddies in your squad yet
           </h2>
           <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto mb-4">
-            Share your Friend Tag <strong className="text-[var(--primary)] font-mono">{friendCode}</strong> with friends, or enter their tag above to connect!
+            Send a friend request to a friend&apos;s tag above, or share your tag <strong className="text-[var(--primary)] font-mono">{friendCode}</strong> so they can request you!
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <button

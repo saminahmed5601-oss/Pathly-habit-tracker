@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import confetti from 'canvas-confetti';
-import { Goal, DailyPlan, UserProfile, FriendBuddy, FocusSessionLog, Badge, GoalCategory, MilestoneItem } from '@/types';
+import { Goal, DailyPlan, UserProfile, FriendBuddy, FocusSessionLog, Badge, GoalCategory, MilestoneItem, FriendRequest } from '@/types';
 import {
   getStoredGoals, saveStoredGoals,
   getStoredDailyPlan, saveStoredDailyPlan,
@@ -21,7 +21,10 @@ import {
   lookupFriendByCode, 
   AuthUserProfile, 
   generateFriendCode,
-  formatFriendCode 
+  formatFriendCode,
+  sendFriendRequestToCloud,
+  fetchIncomingRequestsFromCloud,
+  updateFriendRequestStatusInCloud 
 } from '@/lib/firebase';
 
 interface MilestoneCompletionPayload {
@@ -75,6 +78,12 @@ interface AppContextType {
   authUser: AuthUserProfile | null;
   friendCode: string;
   updateCustomFriendCode: (newCode: string) => void;
+  incomingRequests: FriendRequest[];
+  sentRequests: FriendRequest[];
+  sendFriendRequest: (targetTag: string) => Promise<{ success: boolean; message: string }>;
+  acceptFriendRequest: (requestId: string) => void;
+  declineFriendRequest: (requestId: string) => void;
+  cancelSentRequest: (requestId: string) => void;
   handleGoogleSignIn: () => Promise<void>;
   handleSignOut: () => Promise<void>;
   connectFriendByCode: (code: string) => Promise<boolean>;
@@ -107,6 +116,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [authUser, setAuthUser] = useState<AuthUserProfile | null>(null);
   const [friendCode, setFriendCode] = useState<string>('#pathly-mahin');
 
+  // Friend Requests State
+  const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
+  const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
+
   // Anti-cheat state tracking
   const [lastMilestoneCompletedTime, setLastMilestoneCompletedTime] = useState<number | null>(null);
   const [antiCheatModalTarget, setAntiCheatModalTarget] = useState<{ goalId: string; milestone: MilestoneItem } | null>(null);
@@ -122,8 +135,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setFocusLogs(getStoredFocusLogs());
     setBadges(getStoredBadges());
 
-    // Restore cached auth user if present
+    // Restore cached requests & auth
     try {
+      const storedInc = localStorage.getItem('pathly_incoming_requests_v2');
+      if (storedInc) setIncomingRequests(JSON.parse(storedInc));
+
+      const storedSent = localStorage.getItem('pathly_sent_requests_v2');
+      if (storedSent) setSentRequests(JSON.parse(storedSent));
+
       const cachedAuth = localStorage.getItem('pathly_auth_user');
       if (cachedAuth) {
         const parsed = JSON.parse(cachedAuth);
@@ -140,6 +159,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     setIsLoaded(true);
   }, []);
+
+  // Poll cloud for incoming requests if user has friendCode
+  useEffect(() => {
+    if (!isLoaded || !friendCode) return;
+    fetchIncomingRequestsFromCloud(friendCode).then((reqs) => {
+      if (reqs && reqs.length > 0) {
+        setIncomingRequests((prev) => {
+          const ids = new Set(prev.map(r => r.id));
+          const newItems = (reqs as unknown as FriendRequest[]).filter(r => !ids.has(r.id));
+          if (newItems.length > 0) {
+            const merged = [...prev, ...newItems];
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('pathly_incoming_requests_v2', JSON.stringify(merged));
+            }
+            return merged;
+          }
+          return prev;
+        });
+      }
+    });
+  }, [friendCode, isLoaded]);
 
   // Save changes
   useEffect(() => {
@@ -664,6 +704,116 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     sounds.playLevelUp();
   }, [authUser]);
 
+  const sendFriendRequest = useCallback(async (targetTag: string): Promise<{ success: boolean; message: string }> => {
+    if (!targetTag.trim()) {
+      return { success: false, message: 'Please enter a valid Friend Tag.' };
+    }
+
+    const formattedTarget = formatFriendCode(targetTag);
+    const myTag = friendCode;
+
+    if (formattedTarget.toLowerCase() === myTag.toLowerCase()) {
+      return { success: false, message: 'You cannot send a friend request to your own tag!' };
+    }
+
+    if (friends.some(f => f.tagline === formattedTarget || f.name.toLowerCase() === formattedTarget.toLowerCase())) {
+      return { success: false, message: 'This friend is already in your connected squad!' };
+    }
+
+    if (sentRequests.some(r => r.toTag.toLowerCase() === formattedTarget.toLowerCase() && r.status === 'pending')) {
+      return { success: false, message: 'A request has already been sent to this tag.' };
+    }
+
+    const newReq: FriendRequest = {
+      id: `req-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      fromUid: authUser?.uid || `user-${Date.now()}`,
+      fromName: authUser?.displayName || profile.name || 'Pathly Explorer',
+      fromTag: myTag,
+      fromPhotoURL: authUser?.photoURL || null,
+      fromLevel: profile.level || 1,
+      toTag: formattedTarget,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    setSentRequests(prev => {
+      const updated = [newReq, ...prev];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('pathly_sent_requests_v2', JSON.stringify(updated));
+      }
+      return updated;
+    });
+
+    sendFriendRequestToCloud(newReq as unknown as Record<string, unknown>);
+    sounds.playTaskPop();
+    return { success: true, message: `Friend request sent to ${formattedTarget}!` };
+  }, [friendCode, friends, sentRequests, authUser, profile.name, profile.level]);
+
+  const acceptFriendRequest = useCallback((requestId: string) => {
+    const req = incomingRequests.find(r => r.id === requestId);
+    if (!req) return;
+
+    const newBuddy: FriendBuddy = {
+      id: req.fromUid || `f-${req.fromTag.replace(/[^a-z0-9]/g, '')}`,
+      name: req.fromName || req.fromTag,
+      avatarId: 'sprout',
+      photoURL: req.fromPhotoURL || null,
+      tagline: req.fromTag,
+      currentLevel: req.fromLevel || 1,
+      streak: 0,
+      todayMinutes: 0,
+      todayTargetMinutes: 60,
+      todayGoalTitle: 'Daily Habits',
+      completedMilestonesToday: 0,
+      recentCheers: [],
+      isUserAdded: true,
+    };
+
+    setFriends(prev => {
+      const exists = prev.some(f => f.id === newBuddy.id || f.name.toLowerCase() === newBuddy.name.toLowerCase());
+      if (exists) return prev;
+      const updated = [newBuddy, ...prev];
+      saveStoredFriends(updated);
+      return updated;
+    });
+
+    setIncomingRequests(prev => {
+      const updated = prev.filter(r => r.id !== requestId);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('pathly_incoming_requests_v2', JSON.stringify(updated));
+      }
+      return updated;
+    });
+
+    updateFriendRequestStatusInCloud(requestId, 'accepted');
+    confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
+    sounds.playLevelUp();
+  }, [incomingRequests]);
+
+  const declineFriendRequest = useCallback((requestId: string) => {
+    setIncomingRequests(prev => {
+      const updated = prev.filter(r => r.id !== requestId);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('pathly_incoming_requests_v2', JSON.stringify(updated));
+      }
+      return updated;
+    });
+    updateFriendRequestStatusInCloud(requestId, 'declined');
+    sounds.playTap();
+  }, []);
+
+  const cancelSentRequest = useCallback((requestId: string) => {
+    setSentRequests(prev => {
+      const updated = prev.filter(r => r.id !== requestId);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('pathly_sent_requests_v2', JSON.stringify(updated));
+      }
+      return updated;
+    });
+    updateFriendRequestStatusInCloud(requestId, 'declined');
+    sounds.playTap();
+  }, []);
+
   // Auto-sync state changes to cloud if user is signed in
   useEffect(() => {
     if (isLoaded && authUser) {
@@ -693,6 +843,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         authUser,
         friendCode,
         updateCustomFriendCode,
+        incomingRequests,
+        sentRequests,
+        sendFriendRequest,
+        acceptFriendRequest,
+        declineFriendRequest,
+        cancelSentRequest,
         handleGoogleSignIn,
         handleSignOut,
         connectFriendByCode,

@@ -109,6 +109,18 @@ export interface FriendBuddy {
   isUserAdded?: boolean;
 }
 
+export interface FriendRequest {
+  id: string;
+  fromUid: string;
+  fromName: string;
+  fromTag: string;
+  fromPhotoURL?: string | null;
+  fromLevel: number;
+  toTag: string;
+  status: 'pending' | 'accepted' | 'declined';
+  createdAt: string;
+}
+
 export interface AntiCheatAttempt {
   goalId: string;
   milestoneId: string;

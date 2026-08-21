@@ -238,3 +238,45 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
     return defaultBuddy;
   }
 }
+
+// Send friend request to Firestore
+export async function sendFriendRequestToCloud(req: Record<string, unknown>): Promise<void> {
+  if (db) {
+    try {
+      const ref = doc(db, 'friend_requests', String(req.id));
+      await setDoc(ref, req, { merge: true });
+    } catch (err) {
+      console.warn('Firestore sendFriendRequest error:', err);
+    }
+  }
+}
+
+// Fetch incoming requests from Firestore
+export async function fetchIncomingRequestsFromCloud(userTag: string): Promise<Array<Record<string, unknown>>> {
+  if (db) {
+    try {
+      const q = query(
+        collection(db, 'friend_requests'), 
+        where('toTag', '==', userTag),
+        where('status', '==', 'pending')
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(d => d.data());
+    } catch (err) {
+      console.warn('Firestore fetchIncomingRequests error:', err);
+    }
+  }
+  return [];
+}
+
+// Update friend request status in Firestore
+export async function updateFriendRequestStatusInCloud(requestId: string, status: 'accepted' | 'declined'): Promise<void> {
+  if (db) {
+    try {
+      const ref = doc(db, 'friend_requests', requestId);
+      await setDoc(ref, { status, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (err) {
+      console.warn('Firestore updateFriendRequestStatus error:', err);
+    }
+  }
+}
