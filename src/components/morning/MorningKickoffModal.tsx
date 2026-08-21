@@ -13,11 +13,9 @@ export function MorningKickoffModal({ isOpen, onClose }: MorningKickoffModalProp
   const { updateMorningPlan, goals } = useApp();
 
   const [targetFocusHours, setTargetFocusHours] = useState(2);
-  const [gratitude, setGratitude] = useState('Grateful for energy to learn and build today.');
+  const [gratitude, setGratitude] = useState('');
   const [tasks, setTasks] = useState([
-    { title: 'Study next Web Development course milestone', goalId: 'goal-web-dev', estimatedMinutes: 60 },
-    { title: 'Practice 20 minutes posture & movement', goalId: 'goal-health', estimatedMinutes: 20 },
-    { title: 'Read 1 chapter of Atomic Habits', goalId: 'goal-atomic-habits', estimatedMinutes: 25 },
+    { title: '', goalId: '', estimatedMinutes: 30 },
   ]);
 
   if (!isOpen) return null;

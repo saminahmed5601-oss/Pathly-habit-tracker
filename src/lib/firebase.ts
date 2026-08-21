@@ -165,10 +165,10 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
           id: docData.uid || querySnap.docs[0].id,
           name: docData.profile?.name || 'Buddy',
           avatarId: docData.profile?.avatarId || 'sprout',
-          streak: docData.profile?.streakDays || 1,
+          streak: docData.profile?.streakDays || 0,
           level: docData.profile?.level || 1,
-          todayMinutes: docData.todayFocusMinutes || 45,
-          todayGoalTitle: docData.dailyPlan?.priorityTasks?.[0]?.title || 'Daily Goals',
+          todayMinutes: docData.todayFocusMinutes || 0,
+          todayGoalTitle: docData.dailyPlan?.priorityTasks?.[0]?.title || 'Daily Path',
         };
       }
     } catch (err) {
@@ -176,27 +176,5 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
     }
   }
 
-  // Fallback demo buddies
-  const sampleBuddies: Record<string, { name: string; avatarId: string; streak: number; level: number; todayMinutes: number; todayGoalTitle: string }> = {
-    'PATH-MAYA': { name: 'Maya Chen', avatarId: 'fox', streak: 12, level: 5, todayMinutes: 85, todayGoalTitle: 'LeetCode Medium Graphs' },
-    'PATH-LIAM': { name: 'Liam Walker', avatarId: 'cat', streak: 6, level: 4, todayMinutes: 110, todayGoalTitle: 'Tailwind UI Polish' },
-    'PATH-ZARA': { name: 'Zara Patel', avatarId: 'blossom', streak: 21, level: 7, todayMinutes: 60, todayGoalTitle: 'Kanji Flashcards N4' },
-  };
-
-  if (sampleBuddies[code]) {
-    return {
-      id: `f-${code.toLowerCase()}`,
-      ...sampleBuddies[code],
-    };
-  }
-
-  return {
-    id: `f-${Date.now()}`,
-    name: `Buddy (${code})`,
-    avatarId: 'spark',
-    streak: 3,
-    level: 2,
-    todayMinutes: 40,
-    todayGoalTitle: 'Web Dev & Habits',
-  };
+  return null;
 }

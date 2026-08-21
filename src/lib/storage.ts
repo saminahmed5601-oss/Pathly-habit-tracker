@@ -2,13 +2,13 @@ import { Goal, DailyPlan, UserProfile, FriendBuddy, FocusSessionLog, Badge } fro
 import { INITIAL_GOALS, INITIAL_DAILY_PLAN, INITIAL_USER_PROFILE, INITIAL_FRIENDS, DEFAULT_BADGES } from './constants';
 
 const STORAGE_KEYS = {
-  GOALS: 'bloomtrack_goals_v1',
-  DAILY_PLAN: 'bloomtrack_daily_plan_v1',
-  USER_PROFILE: 'bloomtrack_profile_v1',
-  FRIENDS: 'bloomtrack_friends_v1',
-  FOCUS_LOGS: 'bloomtrack_focus_logs_v1',
-  BADGES: 'bloomtrack_badges_v1',
-  LAST_ANTI_CHEAT: 'bloomtrack_anticheat_timestamp',
+  GOALS: 'pathly_goals_v2',
+  DAILY_PLAN: 'pathly_daily_plan_v2',
+  USER_PROFILE: 'pathly_profile_v2',
+  FRIENDS: 'pathly_friends_v2',
+  FOCUS_LOGS: 'pathly_focus_logs_v2',
+  BADGES: 'pathly_badges_v2',
+  LAST_ANTI_CHEAT: 'pathly_anticheat_timestamp_v2',
 };
 
 export const getStoredGoals = (): Goal[] => {

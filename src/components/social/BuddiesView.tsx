@@ -101,87 +101,105 @@ export function BuddiesView() {
       )}
 
       {/* Friends Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
-        {friends.map((friend) => {
-          const avatarMeta = AVATAR_OPTIONS.find(a => a.id === friend.avatarId) || AVATAR_OPTIONS[0];
-          const progressPercent = Math.min(100, Math.round((friend.todayMinutes / (friend.todayTargetMinutes || 60)) * 100));
+      {friends.length === 0 ? (
+        <div className="clean-card p-8 sm:p-12 text-center bg-[var(--bg-card)] border border-[var(--border)]">
+          <div className="text-4xl mb-3">👥</div>
+          <h2 className="text-sm sm:text-base font-bold text-[var(--text-main)] mb-1">
+            No accountability buddies connected yet
+          </h2>
+          <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto mb-4">
+            Share your Friend Code <strong className="text-[var(--primary)] font-mono">{friendCode}</strong> with friends, or paste their code above to connect and track together!
+          </p>
+          <button
+            onClick={handleCopyMyCode}
+            className="px-4 py-2 rounded-xl bg-[var(--primary)] text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
+          >
+            {copiedMyCode ? 'Copied Friend Code!' : 'Copy My Friend Code'}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+          {friends.map((friend) => {
+            const avatarMeta = AVATAR_OPTIONS.find(a => a.id === friend.avatarId) || AVATAR_OPTIONS[0];
+            const progressPercent = Math.min(100, Math.round((friend.todayMinutes / (friend.todayTargetMinutes || 60)) * 100));
 
-          return (
-            <div
-              key={friend.id}
-              className="clean-card p-4 sm:p-5 bg-[var(--bg-card)] border border-[var(--border)] flex flex-col justify-between space-y-3.5"
-            >
-              <div>
-                {/* Profile row */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 sm:gap-3">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-xl sm:text-2xl shrink-0">
-                      {avatarMeta.emoji}
-                    </div>
-                    <div>
-                      <div className="text-xs sm:text-sm font-bold text-[var(--text-main)] flex items-center gap-1.5">
-                        {friend.name}
-                        <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-500">
-                          Lv.{friend.currentLevel}
-                        </span>
+            return (
+              <div
+                key={friend.id}
+                className="clean-card p-4 sm:p-5 bg-[var(--bg-card)] border border-[var(--border)] flex flex-col justify-between space-y-3.5"
+              >
+                <div>
+                  {/* Profile row */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 sm:gap-3">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-xl sm:text-2xl shrink-0">
+                        {avatarMeta.emoji}
                       </div>
-                      <p className="text-[11px] sm:text-xs text-[var(--text-muted)] truncate max-w-[140px] sm:max-w-[160px]">
-                        {friend.tagline}
-                      </p>
+                      <div>
+                        <div className="text-xs sm:text-sm font-bold text-[var(--text-main)] flex items-center gap-1.5">
+                          {friend.name}
+                          <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-500">
+                            Lv.{friend.currentLevel}
+                          </span>
+                        </div>
+                        <p className="text-[11px] sm:text-xs text-[var(--text-muted)] truncate max-w-[140px] sm:max-w-[160px]">
+                          {friend.tagline}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-xs font-bold text-orange-500 bg-orange-500/10 px-2 py-1 rounded-lg border border-orange-500/20">
+                      <Flame className="w-3.5 h-3.5 fill-orange-500 text-orange-500" />
+                      <span>{friend.streak}d</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 text-xs font-bold text-orange-500 bg-orange-500/10 px-2 py-1 rounded-lg border border-orange-500/20">
-                    <Flame className="w-3.5 h-3.5 fill-orange-500 text-orange-500" />
-                    <span>{friend.streak}d</span>
+                  {/* Today's Goal Progress */}
+                  <div className="my-2.5 p-2.5 sm:p-3 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)]">
+                    <div className="flex justify-between text-[11px] sm:text-xs font-semibold text-[var(--text-main)] mb-1">
+                      <span className="truncate max-w-[150px]">🎯 {friend.todayGoalTitle}</span>
+                      <span className="text-purple-500 font-bold">{friend.todayMinutes}m</span>
+                    </div>
+                    <div className="w-full bg-[var(--border)] h-1.5 sm:h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-purple-500 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Recent Cheer */}
+                  {friend.recentCheers && friend.recentCheers.length > 0 && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
+                      <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500 shrink-0" />
+                      <span className="truncate">
+                        {friend.recentCheers[0].emoji} {friend.recentCheers[0].label} from {friend.recentCheers[0].fromName}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 1-Tap Cheer Boost Buttons */}
+                <div className="pt-2.5 border-t border-[var(--border)]">
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {CHEER_EMOJIS.map((c) => (
+                      <button
+                        key={c.emoji}
+                        onClick={() => sendCheer(friend.id, c.emoji, c.label)}
+                        className="py-2.5 rounded-xl bg-[var(--bg-card-subtle)] hover:bg-purple-500/15 border border-[var(--border)] text-lg hover:scale-105 active:scale-95 transition-all"
+                        title={c.label}
+                      >
+                        {c.emoji}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                {/* Today's Goal Progress */}
-                <div className="my-2.5 p-2.5 sm:p-3 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)]">
-                  <div className="flex justify-between text-[11px] sm:text-xs font-semibold text-[var(--text-main)] mb-1">
-                    <span className="truncate max-w-[150px]">🎯 {friend.todayGoalTitle}</span>
-                    <span className="text-purple-500 font-bold">{friend.todayMinutes}m</span>
-                  </div>
-                  <div className="w-full bg-[var(--border)] h-1.5 sm:h-2 rounded-full overflow-hidden">
-                    <div
-                      className="bg-purple-500 h-full rounded-full transition-all duration-500"
-                      style={{ width: `${progressPercent}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Recent Cheer */}
-                {friend.recentCheers && friend.recentCheers.length > 0 && (
-                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
-                    <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500 shrink-0" />
-                    <span className="truncate">
-                      {friend.recentCheers[0].emoji} {friend.recentCheers[0].label} from {friend.recentCheers[0].fromName}
-                    </span>
-                  </div>
-                )}
               </div>
-
-              {/* 1-Tap Cheer Boost Buttons */}
-              <div className="pt-2.5 border-t border-[var(--border)]">
-                <div className="grid grid-cols-4 gap-1.5">
-                  {CHEER_EMOJIS.map((c) => (
-                    <button
-                      key={c.emoji}
-                      onClick={() => sendCheer(friend.id, c.emoji, c.label)}
-                      className="py-2.5 rounded-xl bg-[var(--bg-card-subtle)] hover:bg-purple-500/15 border border-[var(--border)] text-lg hover:scale-105 active:scale-95 transition-all"
-                      title={c.label}
-                    >
-                      {c.emoji}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
     </div>
   );

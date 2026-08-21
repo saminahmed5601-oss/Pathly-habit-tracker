@@ -68,13 +68,19 @@ export function MilestonesView({ onOpenNewGoal }: MilestonesViewProps) {
       {/* Goal Cards */}
       {goals.length === 0 ? (
         <div className="clean-card p-8 sm:p-12 text-center bg-[var(--bg-card)] border border-[var(--border)]">
-          <div className="text-4xl mb-2">🎯</div>
-          <h2 className="text-sm sm:text-base font-bold text-[var(--text-main)]">No active journeys yet!</h2>
+          <div className="text-4xl mb-3">🎯</div>
+          <h2 className="text-sm sm:text-base font-bold text-[var(--text-main)] mb-1">
+            No active journeys yet!
+          </h2>
+          <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto mb-4">
+            Create your first milestone course or goal. If you already completed steps in the past, you can choose your starting offset!
+          </p>
           <button
             onClick={onOpenNewGoal}
-            className="mt-4 px-4 py-2 rounded-xl bg-[var(--primary)] text-white font-bold text-xs"
+            className="px-4 py-2.5 rounded-xl bg-[var(--primary)] text-white font-bold text-xs shadow-xs active:scale-95 transition-all inline-flex items-center gap-1.5"
           >
-            Create First Journey
+            <Plus className="w-4 h-4" />
+            <span>Create First Journey</span>
           </button>
         </div>
       ) : (

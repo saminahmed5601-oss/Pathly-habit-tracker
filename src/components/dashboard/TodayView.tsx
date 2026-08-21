@@ -207,8 +207,12 @@ export function TodayView({ onOpenMorning, onOpenEvening }: TodayViewProps) {
             {/* Task Cards */}
             <div className="space-y-2">
               {tasks.length === 0 ? (
-                <div className="text-center py-8 rounded-xl border border-dashed border-[var(--border)] text-xs text-[var(--text-muted)]">
-                  No priority missions set for today.
+                <div className="text-center py-8 rounded-xl border border-dashed border-[var(--border)] text-xs text-[var(--text-muted)] bg-[var(--bg-card-subtle)]">
+                  <div className="text-2xl mb-1.5">☀️</div>
+                  <p className="font-bold text-[var(--text-main)] mb-1">Start your day fresh</p>
+                  <p className="text-[11px] text-[var(--text-muted)] max-w-xs mx-auto">
+                    Click <strong>Sunrise</strong> at the top to prime your morning or add your first task below!
+                  </p>
                 </div>
               ) : (
                 tasks.map((task) => {

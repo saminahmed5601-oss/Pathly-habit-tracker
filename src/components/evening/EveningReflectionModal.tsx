@@ -13,7 +13,7 @@ export function EveningReflectionModal({ isOpen, onClose }: EveningReflectionMod
   const { dailyPlan, focusLogs, profile, updateEveningReflection } = useApp();
 
   const [reflection, setReflection] = useState(
-    dailyPlan.eveningReflection || 'Crushed my focus goals and made clean progress on coding!'
+    dailyPlan.eveningReflection || ''
   );
 
   if (!isOpen) return null;
