@@ -3,15 +3,23 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { AVATAR_OPTIONS } from '@/lib/constants';
-import { Flame, Heart, Copy, Check, UserPlus } from 'lucide-react';
+import { Flame, Heart, Copy, Check, UserPlus, Trash2, Plus, X } from 'lucide-react';
 import { sounds } from '@/lib/sounds';
 
 export function BuddiesView() {
-  const { friends, sendCheer, friendCode, connectFriendByCode } = useApp();
+  const { friends, sendCheer, friendCode, connectFriendByCode, removeFriend, addNewFriend } = useApp();
   const [friendCodeInput, setFriendCodeInput] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
   const [connectError, setConnectError] = useState('');
   const [copiedMyCode, setCopiedMyCode] = useState(false);
+
+  // Manual Add Modal / State
+  const [showAddCustom, setShowAddCustom] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customTagline, setCustomTagline] = useState('Learning & Building Every Day 🔥');
+  const [customGoalTitle, setCustomGoalTitle] = useState('Daily Goals');
+  const [customAvatarId, setCustomAvatarId] = useState(AVATAR_OPTIONS[0].id);
 
   const CHEER_EMOJIS = [
     { emoji: '🔥', label: 'Fire' },
@@ -34,17 +42,36 @@ export function BuddiesView() {
     try {
       setIsConnecting(true);
       setConnectError('');
+      setSuccessMsg('');
       const success = await connectFriendByCode(friendCodeInput.trim());
       if (success) {
+        setSuccessMsg(`✨ Successfully connected ${friendCodeInput.trim().toUpperCase()} to your squad!`);
         setFriendCodeInput('');
+        setTimeout(() => setSuccessMsg(''), 4000);
       } else {
-        setConnectError('Could not find friend with this code.');
+        setConnectError('Could not connect friend.');
       }
     } catch {
       setConnectError('Error connecting to friend.');
     } finally {
       setIsConnecting(false);
     }
+  };
+
+  const handleCreateCustomBuddy = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customName.trim()) return;
+
+    addNewFriend({
+      name: customName.trim(),
+      avatarId: customAvatarId,
+      tagline: customTagline.trim() || 'Accountability Partner',
+      todayGoalTitle: customGoalTitle.trim() || 'Daily Habits',
+    });
+
+    setCustomName('');
+    setShowAddCustom(false);
+    sounds.playLevelUp();
   };
 
   return (
@@ -80,7 +107,7 @@ export function BuddiesView() {
               setFriendCodeInput(e.target.value);
               if (connectError) setConnectError('');
             }}
-            placeholder="Friend's Code (e.g. PATH-MAYA)..."
+            placeholder="Friend's Code (e.g. PATH-7821)..."
             className="flex-1 min-w-[160px] px-3.5 py-2.5 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none uppercase font-mono"
           />
           <button
@@ -89,15 +116,110 @@ export function BuddiesView() {
             className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-purple-600 hover:opacity-90 active:scale-98 disabled:opacity-40 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0"
           >
             <UserPlus className="w-3.5 h-3.5" />
-            <span>{isConnecting ? 'Adding...' : 'Connect Buddy'}</span>
+            <span>{isConnecting ? 'Connecting...' : 'Connect Buddy'}</span>
           </button>
         </form>
       </div>
 
+      {/* Success Notification */}
+      {successMsg && (
+        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-[var(--primary)] font-bold flex items-center gap-2 animate-fadeIn">
+          <span>🎉</span>
+          <span>{successMsg}</span>
+        </div>
+      )}
+
+      {/* Error Notification */}
       {connectError && (
         <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-500 font-bold">
           {connectError}
         </div>
+      )}
+
+      {/* Section Header with + Add Custom Buddy Option */}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm sm:text-base font-black text-[var(--text-main)]">
+          Connected Squad ({friends.length})
+        </h2>
+
+        <button
+          onClick={() => setShowAddCustom(!showAddCustom)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--bg-card-subtle)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-bold text-[var(--text-main)] transition-colors"
+        >
+          <Plus className="w-3.5 h-3.5 text-purple-500" />
+          <span>Add Custom Buddy</span>
+        </button>
+      </div>
+
+      {/* Custom Buddy Inline Form */}
+      {showAddCustom && (
+        <form onSubmit={handleCreateCustomBuddy} className="clean-card p-4 sm:p-5 bg-[var(--bg-card)] border border-purple-500/40 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs sm:text-sm font-bold text-[var(--text-main)]">
+              Add a Friend or Study Partner
+            </h3>
+            <button 
+              type="button" 
+              onClick={() => setShowAddCustom(false)} 
+              className="p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)]"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1">Friend Name</label>
+              <input
+                type="text"
+                required
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                placeholder="e.g. Alex"
+                className="w-full px-3 py-2 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1">Today Goal</label>
+              <input
+                type="text"
+                value={customGoalTitle}
+                onChange={(e) => setCustomGoalTitle(e.target.value)}
+                placeholder="e.g. Daily Habits & Coding"
+                className="w-full px-3 py-2 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Avatar Selector */}
+          <div>
+            <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1.5">Pick Avatar</label>
+            <div className="flex items-center gap-2">
+              {AVATAR_OPTIONS.map((a) => (
+                <button
+                  type="button"
+                  key={a.id}
+                  onClick={() => setCustomAvatarId(a.id)}
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg border transition-all ${
+                    customAvatarId === a.id
+                      ? 'border-purple-500 bg-purple-500/10 scale-110 shadow-xs'
+                      : 'border-[var(--border)] bg-[var(--bg-card-subtle)]'
+                  }`}
+                >
+                  {a.emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-2.5 rounded-xl bg-purple-600 hover:opacity-90 active:scale-98 text-white font-bold text-xs transition-all shadow-xs"
+          >
+            Save Buddy to Squad
+          </button>
+        </form>
       )}
 
       {/* Friends Grid */}
@@ -108,14 +230,25 @@ export function BuddiesView() {
             No accountability buddies connected yet
           </h2>
           <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto mb-4">
-            Share your Friend Code <strong className="text-[var(--primary)] font-mono">{friendCode}</strong> with friends, or paste their code above to connect and track together!
+            Share your Friend Code <strong className="text-[var(--primary)] font-mono">{friendCode}</strong> with friends, or enter their code above to connect!
           </p>
-          <button
-            onClick={handleCopyMyCode}
-            className="px-4 py-2 rounded-xl bg-[var(--primary)] text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
-          >
-            {copiedMyCode ? 'Copied Friend Code!' : 'Copy My Friend Code'}
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              onClick={handleCopyMyCode}
+              className="px-4 py-2.5 rounded-xl bg-[var(--primary)] text-white text-xs font-bold shadow-xs active:scale-95 transition-all inline-flex items-center gap-1.5"
+            >
+              {copiedMyCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedMyCode ? 'Copied Friend Code!' : 'Copy My Code'}</span>
+            </button>
+
+            <button
+              onClick={() => setShowAddCustom(true)}
+              className="px-4 py-2.5 rounded-xl bg-[var(--bg-card-subtle)] text-[var(--text-main)] border border-[var(--border)] text-xs font-bold hover:bg-[var(--border)] active:scale-95 transition-all inline-flex items-center gap-1.5"
+            >
+              <Plus className="w-3.5 h-3.5 text-purple-500" />
+              <span>Add Custom Buddy</span>
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
@@ -131,26 +264,40 @@ export function BuddiesView() {
                 <div>
                   {/* Profile row */}
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 sm:gap-3">
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                       <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-xl sm:text-2xl shrink-0">
                         {avatarMeta.emoji}
                       </div>
-                      <div>
-                        <div className="text-xs sm:text-sm font-bold text-[var(--text-main)] flex items-center gap-1.5">
-                          {friend.name}
-                          <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-500">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs sm:text-sm font-bold text-[var(--text-main)] flex items-center gap-1.5 truncate">
+                          <span className="truncate">{friend.name}</span>
+                          <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-500 shrink-0">
                             Lv.{friend.currentLevel}
                           </span>
                         </div>
-                        <p className="text-[11px] sm:text-xs text-[var(--text-muted)] truncate max-w-[140px] sm:max-w-[160px]">
+                        <p className="text-[11px] sm:text-xs text-[var(--text-muted)] truncate">
                           {friend.tagline}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 text-xs font-bold text-orange-500 bg-orange-500/10 px-2 py-1 rounded-lg border border-orange-500/20">
-                      <Flame className="w-3.5 h-3.5 fill-orange-500 text-orange-500" />
-                      <span>{friend.streak}d</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1 text-xs font-bold text-orange-500 bg-orange-500/10 px-2 py-1 rounded-lg border border-orange-500/20">
+                        <Flame className="w-3.5 h-3.5 fill-orange-500 text-orange-500" />
+                        <span>{friend.streak}d</span>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          if (confirm(`Remove "${friend.name}" from your squad?`)) {
+                            removeFriend(friend.id);
+                          }
+                        }}
+                        className="p-1 rounded-lg text-[var(--text-muted)] hover:text-red-500 transition-colors"
+                        title="Remove buddy"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
 

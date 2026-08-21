@@ -76,6 +76,7 @@ interface AppContextType {
   handleGoogleSignIn: () => Promise<void>;
   handleSignOut: () => Promise<void>;
   connectFriendByCode: (code: string) => Promise<boolean>;
+  removeFriend: (friendId: string) => void;
   sendCheer: (friendId: string, emoji: string, label: string) => void;
   addNewFriend: (data: { name: string; avatarId: string; tagline: string; todayGoalTitle: string }) => void;
 
@@ -638,6 +639,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return true;
   }, []);
 
+  const removeFriend = useCallback((friendId: string) => {
+    setFriends(prev => prev.filter(f => f.id !== friendId));
+    sounds.playTap();
+  }, []);
+
   // Auto-sync state changes to cloud if user is signed in
   useEffect(() => {
     if (isLoaded && authUser) {
@@ -668,6 +674,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         handleGoogleSignIn,
         handleSignOut,
         connectFriendByCode,
+        removeFriend,
         lastMilestoneCompletedTime,
         antiCheatModalTarget,
         setAntiCheatModalTarget,

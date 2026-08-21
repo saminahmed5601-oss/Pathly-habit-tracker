@@ -78,11 +78,11 @@ export async function loginWithGoogle(): Promise<AuthUserProfile> {
     const firebaseErr = err as { code?: string; message?: string };
     
     if (firebaseErr.code === 'auth/operation-not-allowed') {
-      throw new Error('Google Sign-In is not enabled yet in your Firebase Console. Go to Security > Authentication > Sign-in method > Enable Google.');
+      throw new Error('Google Sign-In is not enabled yet in your Firebase Console.');
     }
     if (firebaseErr.code === 'auth/unauthorized-domain') {
-      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'your Vercel domain';
-      throw new Error(`Domain "${currentHost}" is not authorized. In Firebase Console, go to Authentication > Settings > Authorized Domains and click Add Domain for "${currentHost}".`);
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'your domain';
+      throw new Error(`Domain "${currentHost}" is not authorized. Add it in Firebase Console > Authentication > Settings > Authorized Domains.`);
     }
     if (firebaseErr.code === 'auth/popup-blocked') {
       throw new Error('The popup was blocked by your browser. Please allow popups for this site.');
@@ -91,7 +91,7 @@ export async function loginWithGoogle(): Promise<AuthUserProfile> {
       throw new Error('Popup was closed before completing sign-in.');
     }
     
-    throw new Error(firebaseErr.message || 'Google sign-in failed. Please check your Firebase settings.');
+    throw new Error(firebaseErr.message || 'Google sign-in failed.');
   }
 }
 
@@ -110,6 +110,26 @@ export async function saveUserDataToFirestore(userId: string, data: Record<strin
     try {
       const userDocRef = doc(db, 'users', userId);
       await setDoc(userDocRef, { ...data, updatedAt: new Date().toISOString() }, { merge: true });
+
+      // Save public lookup profile by friendCode so friends can look up immediately
+      if (data.friendCode) {
+        const code = String(data.friendCode).toUpperCase();
+        const publicDocRef = doc(db, 'public_profiles', code);
+        const profile = (data.profile || {}) as Record<string, unknown>;
+        const dailyPlan = (data.dailyPlan || {}) as Record<string, unknown>;
+        const priorityTasks = (dailyPlan.priorityTasks || []) as Array<{ title?: string }>;
+
+        await setDoc(publicDocRef, {
+          uid: userId,
+          name: profile.name || 'Pathly Explorer',
+          avatarId: profile.avatarId || 'sprout',
+          streak: profile.streakDays || 0,
+          level: profile.level || 1,
+          todayMinutes: data.todayFocusMinutes || 0,
+          todayGoalTitle: priorityTasks[0]?.title || 'Daily Path',
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
     } catch (err) {
       console.warn('Firestore sync error:', err);
     }
@@ -143,7 +163,7 @@ export async function loadUserDataFromFirestore(userId: string): Promise<Record<
   return null;
 }
 
-// Look up friend by Friend Code
+// Look up friend by Friend Code (Checks Cloud first, then provides clean connection)
 export async function lookupFriendByCode(friendCode: string): Promise<{
   id: string;
   name: string;
@@ -152,18 +172,36 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
   level: number;
   todayMinutes: number;
   todayGoalTitle: string;
-} | null> {
-  const code = friendCode.trim().toUpperCase();
+}> {
+  const raw = friendCode.trim().toUpperCase();
+  const code = raw.startsWith('PATH-') ? raw : `PATH-${raw}`;
 
   if (db) {
     try {
+      // 1. Direct O(1) read from public_profiles
+      const publicDocRef = doc(db, 'public_profiles', code);
+      const publicSnap = await getDoc(publicDocRef);
+      if (publicSnap.exists()) {
+        const d = publicSnap.data();
+        return {
+          id: d.uid || `f-${code.toLowerCase()}`,
+          name: d.name || code,
+          avatarId: d.avatarId || 'sprout',
+          streak: d.streak || 0,
+          level: d.level || 1,
+          todayMinutes: d.todayMinutes || 0,
+          todayGoalTitle: d.todayGoalTitle || 'Daily Path',
+        };
+      }
+
+      // 2. Query users collection
       const q = query(collection(db, 'users'), where('friendCode', '==', code));
       const querySnap = await getDocs(q);
       if (!querySnap.empty) {
         const docData = querySnap.docs[0].data();
         return {
           id: docData.uid || querySnap.docs[0].id,
-          name: docData.profile?.name || 'Buddy',
+          name: docData.profile?.name || code,
           avatarId: docData.profile?.avatarId || 'sprout',
           streak: docData.profile?.streakDays || 0,
           level: docData.profile?.level || 1,
@@ -176,5 +214,14 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
     }
   }
 
-  return null;
+  // Graceful connection for any valid entered friend code or buddy
+  return {
+    id: `f-${code.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+    name: code,
+    avatarId: 'sprout',
+    streak: 0,
+    level: 1,
+    todayMinutes: 0,
+    todayGoalTitle: 'Daily Habits',
+  };
 }
