@@ -18,90 +18,30 @@ import {
   Firestore 
 } from 'firebase/firestore';
 
-export interface FirebaseConfigType {
-  apiKey: string;
-  authDomain: string;
-  projectId: string;
-  storageBucket?: string;
-  messagingSenderId?: string;
-  appId?: string;
-  measurementId?: string;
+export const FIREBASE_CONFIG = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyCGXIF3i1OfPZRxCAvsgAtGWSWqyXzFABw',
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'pathly-e1b6e.firebaseapp.com',
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'pathly-e1b6e',
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'pathly-e1b6e.firebasestorage.app',
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '888577741663',
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '1:888577741663:web:0dfd3a36cf8e47e2e71cea',
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || 'G-QH0DSLVY99',
+};
+
+let app: FirebaseApp;
+if (getApps().length === 0) {
+  app = initializeApp(FIREBASE_CONFIG);
+} else {
+  app = getApp();
 }
 
-export function getActiveFirebaseConfig(): FirebaseConfigType | null {
-  if (typeof window === 'undefined') return null;
+export const auth: Auth = getAuth(app);
+export const db: Firestore = getFirestore(app);
 
-  // 1. Check environment variables first (if valid)
-  const envKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-  if (envKey && envKey !== 'demo-api-key' && envKey.length > 20 && !envKey.includes('...')) {
-    return {
-      apiKey: envKey,
-      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-      measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
-    };
-  }
-
-  // 2. Check if user saved custom config in localStorage
-  try {
-    const saved = localStorage.getItem('pathly_custom_firebase_config');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.apiKey && parsed.apiKey.length > 20 && !parsed.apiKey.includes('...')) {
-        return parsed;
-      }
-    }
-  } catch {}
-
-  // 3. Fallback to hardcoded verified project config
-  return {
-    apiKey: 'AIzaSyCGXIF3i1OfPZRxCAvsgAtGWSWqyXzFABw',
-    authDomain: 'pathly-e1b6e.firebaseapp.com',
-    projectId: 'pathly-e1b6e',
-    storageBucket: 'pathly-e1b6e.firebasestorage.app',
-    messagingSenderId: '888577741663',
-    appId: '1:888577741663:web:0dfd3a36cf8e47e2e71cea',
-    measurementId: 'G-QH0DSLVY99',
-  };
-}
-
-let app: FirebaseApp | null = null;
-let auth: Auth | null = null;
-let db: Firestore | null = null;
-let googleProvider: GoogleAuthProvider | null = null;
-
-export function initFirebase(config?: FirebaseConfigType | null): boolean {
-  const activeConfig = config || getActiveFirebaseConfig();
-  if (!activeConfig || typeof window === 'undefined') return false;
-
-  try {
-    if (getApps().length > 0) {
-      app = getApp();
-    } else {
-      app = initializeApp(activeConfig);
-    }
-    auth = getAuth(app);
-    db = getFirestore(app);
-    googleProvider = new GoogleAuthProvider();
-    googleProvider.addScope('email');
-    googleProvider.addScope('profile');
-    googleProvider.setCustomParameters({ prompt: 'select_account' });
-    return true;
-  } catch (err) {
-    console.error('Firebase initialization error:', err);
-    return false;
-  }
-}
-
-// Initialize on module load
-if (typeof window !== 'undefined') {
-  initFirebase();
-}
-
-export { auth, db, googleProvider };
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.addScope('email');
+googleProvider.addScope('profile');
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export interface AuthUserProfile {
   uid: string;
@@ -118,12 +58,6 @@ export function generateFriendCode(uid: string): string {
 
 // 1-Click Real Google Sign In (Triggers Google OAuth Popup)
 export async function loginWithGoogle(): Promise<AuthUserProfile> {
-  const isReady = initFirebase();
-  
-  if (!isReady || !auth || !googleProvider) {
-    throw new Error('CONFIG_REQUIRED');
-  }
-
   try {
     const result = await signInWithPopup(auth, googleProvider);
     const u = result.user;
@@ -150,10 +84,6 @@ export async function loginWithGoogle(): Promise<AuthUserProfile> {
     }
     if (firebaseErr.code === 'auth/popup-closed-by-user') {
       throw new Error('Popup was closed before completing sign-in.');
-    }
-    if (firebaseErr.code === 'auth/invalid-api-key' || firebaseErr.code === 'auth/api-key-not-valid') {
-      if (typeof window !== 'undefined') localStorage.removeItem('pathly_custom_firebase_config');
-      throw new Error('Invalid API key detected. Cleaned up cached key. Please click Continue with Google again!');
     }
     
     throw new Error(firebaseErr.message || 'Google sign-in failed. Please check your Firebase settings.');

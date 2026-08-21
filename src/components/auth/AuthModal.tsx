@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { 
   X, 
@@ -10,14 +10,9 @@ import {
   LogOut, 
   Check, 
   Copy, 
-  Settings, 
-  Key, 
-  AlertCircle, 
-  ExternalLink,
-  Sparkles
+  AlertCircle
 } from 'lucide-react';
 import { sounds } from '@/lib/sounds';
-import { getActiveFirebaseConfig, initFirebase } from '@/lib/firebase';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -29,22 +24,6 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [copiedCode, setCopiedCode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [showConfigDrawer, setShowConfigDrawer] = useState(false);
-
-  // Custom Firebase Config form state
-  const [apiKey, setApiKey] = useState('');
-  const [authDomain, setAuthDomain] = useState('');
-  const [projectId, setProjectId] = useState('');
-  const [configSaved, setConfigSaved] = useState(false);
-
-  useEffect(() => {
-    const existing = getActiveFirebaseConfig();
-    if (existing) {
-      setApiKey(existing.apiKey || '');
-      setAuthDomain(existing.authDomain || '');
-      setProjectId(existing.projectId || '');
-    }
-  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -57,43 +36,10 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       onClose();
     } catch (err: unknown) {
       const e = err as { message?: string };
-      if (e.message === 'CONFIG_REQUIRED') {
-        setShowConfigDrawer(true);
-        setErrorMessage('To connect with your real Google account, enter your free Firebase project keys below.');
-      } else if (e.message === 'POPUP_CLOSED') {
-        setErrorMessage('Google sign-in popup was closed before completing.');
-      } else if (e.message === 'UNAUTHORIZED_DOMAIN') {
-        setErrorMessage('Please add "localhost" to authorized domains in your Firebase Console.');
-      } else {
-        setErrorMessage(e.message || 'Failed to open Google sign-in.');
-      }
+      setErrorMessage(e.message || 'Google sign-in failed. Please check your connection.');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleSaveConfig = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!apiKey.trim() || !authDomain.trim() || !projectId.trim()) {
-      setErrorMessage('Please fill in API Key, Auth Domain, and Project ID.');
-      return;
-    }
-
-    const config = {
-      apiKey: apiKey.trim(),
-      authDomain: authDomain.trim(),
-      projectId: projectId.trim(),
-    };
-
-    localStorage.setItem('pathly_custom_firebase_config', JSON.stringify(config));
-    initFirebase(config);
-    setConfigSaved(true);
-    sounds.playTaskPop();
-    setTimeout(() => {
-      setConfigSaved(false);
-      setShowConfigDrawer(false);
-      onSignInClick();
-    }, 800);
   };
 
   const onSignOutClick = async () => {
@@ -240,88 +186,6 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               </svg>
               <span>{isLoading ? 'Opening Google Login...' : 'Continue with Google'}</span>
             </button>
-
-            {/* Quick Firebase Config Toggle */}
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => setShowConfigDrawer(!showConfigDrawer)}
-                className="text-[11px] font-bold text-[var(--text-muted)] hover:text-[var(--primary)] flex items-center justify-center gap-1 mx-auto transition-colors"
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span>{showConfigDrawer ? 'Hide Firebase Project Setup' : 'Connect Firebase Project (Free)'}</span>
-              </button>
-            </div>
-
-            {/* Firebase Config Drawer */}
-            {showConfigDrawer && (
-              <form onSubmit={handleSaveConfig} className="p-4 rounded-2xl bg-[var(--bg-card-subtle)] border border-[var(--border)] text-left space-y-3 mt-3 animate-in fade-in">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[var(--text-main)] flex items-center gap-1.5">
-                    <Key className="w-3.5 h-3.5 text-[var(--primary)]" />
-                    Firebase Project Keys
-                  </span>
-                  <a
-                    href="https://console.firebase.google.com"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[10px] text-[var(--primary)] font-bold flex items-center gap-0.5 hover:underline"
-                  >
-                    Get Free Keys <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1">
-                    API Key
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full px-2.5 py-1.5 rounded-lg text-xs bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-main)] focus:outline-none font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1">
-                    Auth Domain
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={authDomain}
-                    onChange={(e) => setAuthDomain(e.target.value)}
-                    placeholder="your-project.firebaseapp.com"
-                    className="w-full px-2.5 py-1.5 rounded-lg text-xs bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-main)] focus:outline-none font-mono"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1">
-                    Project ID
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={projectId}
-                    onChange={(e) => setProjectId(e.target.value)}
-                    placeholder="your-project-id"
-                    className="w-full px-2.5 py-1.5 rounded-lg text-xs bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-main)] focus:outline-none font-mono"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-2 rounded-xl bg-[var(--primary)] text-white font-bold text-xs shadow-xs hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
-                >
-                  {configSaved ? <Check className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
-                  <span>{configSaved ? 'Config Saved! Launching...' : 'Save & Authenticate with Google'}</span>
-                </button>
-              </form>
-            )}
           </div>
         )}
 
