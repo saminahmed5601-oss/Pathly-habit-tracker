@@ -1,10 +1,9 @@
-'use client';
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { FriendBuddy } from '@/types';
-import { Flame, Heart, Copy, Check, Trash2, Plus, X, Edit3, User, Send, Clock, UserCheck, UserX, ChevronRight, Target } from 'lucide-react';
+import { Flame, Heart, Copy, Check, Trash2, Plus, X, Edit3, User, Send, Clock, UserCheck, UserX, ChevronRight, Target, Search, Sparkles, Loader2 } from 'lucide-react';
 import { sounds } from '@/lib/sounds';
+import { searchPublicProfiles, formatFriendCode } from '@/lib/firebase';
 import { BuddyDetailModal } from './BuddyDetailModal';
 
 export function BuddiesView() {
@@ -31,6 +30,43 @@ export function BuddiesView() {
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [copiedMyCode, setCopiedMyCode] = useState(false);
+
+  // Live Friend Search & Discovered Profiles State
+  const [searchResults, setSearchResults] = useState<Array<{
+    uid: string;
+    tag: string;
+    name: string;
+    photoURL?: string | null;
+    level: number;
+    streak: number;
+    bestStreak: number;
+    todayGoalTitle: string;
+  }>>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Debounced live search
+  useEffect(() => {
+    const query = friendTagInput.trim();
+    if (!query || query.length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await searchPublicProfiles(query);
+        setSearchResults(results);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [friendTagInput]);
 
   // Selected Buddy for Full Progress Modal
   const [selectedBuddy, setSelectedBuddy] = useState<FriendBuddy | null>(null);
@@ -83,18 +119,17 @@ export function BuddiesView() {
     }
   };
 
-  const handleSendRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!friendTagInput.trim()) return;
-
+  const handleSendDirectTag = async (tagToSend: string) => {
+    if (!tagToSend.trim()) return;
     try {
       setIsSending(true);
       setErrorMsg('');
       setSuccessMsg('');
-      const res = await sendFriendRequest(friendTagInput.trim());
+      const res = await sendFriendRequest(tagToSend.trim());
       if (res.success) {
         setSuccessMsg(res.message);
         setFriendTagInput('');
+        setSearchResults([]);
         setTimeout(() => setSuccessMsg(''), 4000);
       } else {
         setErrorMsg(res.message);
@@ -104,6 +139,11 @@ export function BuddiesView() {
     } finally {
       setIsSending(false);
     }
+  };
+
+  const handleSendRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSendDirectTag(friendTagInput);
   };
 
   const handleCreateCustomBuddy = (e: React.FormEvent) => {
@@ -209,29 +249,163 @@ export function BuddiesView() {
           </div>
         </div>
 
-        {/* Right: Send Friend Request Form */}
-        <form onSubmit={handleSendRequest} className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full md:max-w-sm">
-          <input
-            type="text"
-            required
-            value={friendTagInput}
-            onChange={(e) => {
-              setFriendTagInput(e.target.value);
-              if (errorMsg) setErrorMsg('');
-            }}
-            placeholder="Friend's Tag (e.g. #pathly-alex)..."
-            className="flex-1 min-w-[150px] px-3 py-2 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none font-mono"
-          />
+        {/* Right: Search User / Send Friend Request Form */}
+        <form onSubmit={handleSendRequest} className="relative flex flex-wrap sm:flex-nowrap items-center gap-2 w-full md:max-w-md">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              required
+              value={friendTagInput}
+              onChange={(e) => {
+                setFriendTagInput(e.target.value);
+                if (errorMsg) setErrorMsg('');
+              }}
+              placeholder="Search by name or #tag (e.g. mahin)..."
+              className="w-full pl-8.5 pr-7 py-2 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none focus:border-purple-500 font-mono transition-colors"
+            />
+            {friendTagInput && (
+              <button
+                type="button"
+                onClick={() => {
+                  setFriendTagInput('');
+                  setSearchResults([]);
+                }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-main)] p-0.5 rounded-full"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
           <button
             type="submit"
             disabled={isSending || !friendTagInput.trim()}
-            className="w-full sm:w-auto px-3.5 py-2 rounded-xl bg-purple-600 hover:opacity-90 active:scale-98 disabled:opacity-40 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0"
+            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-purple-600 hover:opacity-90 active:scale-98 disabled:opacity-40 text-white font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 shrink-0"
           >
-            <Send className="w-3.5 h-3.5" />
+            {isSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
             <span>{isSending ? 'Sending...' : 'Send Request'}</span>
           </button>
         </form>
       </div>
+
+      {/* Live Discovered User Search Preview Card */}
+      {friendTagInput.trim().length >= 2 && (
+        <div className="clean-card p-3.5 sm:p-4 bg-[var(--bg-card)] border-2 border-purple-500/30 rounded-2xl shadow-lg space-y-2.5 animate-fadeIn">
+          <div className="flex items-center justify-between text-[11px] font-bold text-purple-400 px-1">
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <span>
+                {isSearching 
+                  ? 'Searching Pathly profiles...' 
+                  : searchResults.length > 0 
+                    ? `Discovered Users (${searchResults.length})` 
+                    : 'Profile Search'}
+              </span>
+            </span>
+            {isSearching && <Loader2 className="w-3 h-3 animate-spin text-purple-400" />}
+          </div>
+
+          {searchResults.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {searchResults.map((user) => {
+                const isMe = user.tag.toLowerCase() === friendCode.toLowerCase();
+                const isFriend = friends.some(f => f.tagline.toLowerCase() === user.tag.toLowerCase());
+                const hasSent = sentRequests.some(r => r.toTag.toLowerCase() === user.tag.toLowerCase());
+                const letter = (user.name.charAt(0) || 'P').toUpperCase();
+
+                return (
+                  <div 
+                    key={user.tag}
+                    className="p-3 rounded-xl bg-[var(--bg-card-subtle)] hover:border-purple-500/40 border border-[var(--border)] flex items-center justify-between gap-3 transition-all"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      {user.photoURL ? (
+                        <div className="w-10 h-10 rounded-xl overflow-hidden border border-purple-500/40 shrink-0 bg-purple-500/10">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 via-indigo-500 to-cyan-600 text-white font-black flex items-center justify-center text-sm shrink-0 select-none">
+                          {letter}
+                        </div>
+                      )}
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-[var(--text-main)] truncate">{user.name}</span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-400 shrink-0">
+                            Lv.{user.level || 1}
+                          </span>
+                          {user.streak > 0 && (
+                            <span className="text-[9px] font-bold text-amber-500 flex items-center gap-0.5 shrink-0">
+                              <Flame className="w-2.5 h-2.5" />
+                              {user.streak}d
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] font-mono text-[var(--primary)] truncate font-semibold">
+                          {user.tag}
+                        </div>
+                        {user.todayGoalTitle && (
+                          <div className="text-[10px] text-[var(--text-muted)] truncate flex items-center gap-1 mt-0.5">
+                            <Target className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
+                            <span className="truncate">{user.todayGoalTitle}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      {isMe ? (
+                        <span className="px-2.5 py-1 rounded-lg bg-[var(--primary-light)] text-[var(--primary-text)] text-[11px] font-bold">
+                          You
+                        </span>
+                      ) : isFriend ? (
+                        <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-500 border border-emerald-500/30 text-[11px] font-bold flex items-center gap-1">
+                          <Check className="w-3 h-3" />
+                          Connected
+                        </span>
+                      ) : hasSent ? (
+                        <span className="px-2.5 py-1 rounded-lg bg-purple-500/15 text-purple-400 border border-purple-500/30 text-[11px] font-bold flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Sent
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleSendDirectTag(user.tag)}
+                          disabled={isSending}
+                          className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 disabled:opacity-50 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-all"
+                        >
+                          <Send className="w-3 h-3" />
+                          <span>{isSending ? 'Sending...' : 'Send Request'}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : !isSearching ? (
+            <div className="p-3 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="text-xs text-[var(--text-muted)]">
+                <span>No profile named &ldquo;<span className="text-[var(--text-main)] font-semibold">{friendTagInput}</span>&rdquo; found yet. You can still send an invite to </span>
+                <span className="font-mono font-bold text-[var(--primary)]">{formatFriendCode(friendTagInput)}</span>:
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSendDirectTag(formatFriendCode(friendTagInput))}
+                disabled={isSending}
+                className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 shrink-0 transition-all"
+              >
+                <Send className="w-3 h-3" />
+                <span>Invite {formatFriendCode(friendTagInput)}</span>
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* Success Notification */}
       {successMsg && (

@@ -220,7 +220,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // 3. Fallback Initial Fetch and periodic 4-second check
+    // 3. Lightning-fast sync: 1.5-second polling + window focus & visibility change
     const checkRequests = () => {
       fetchIncomingRequestsFromCloud(friendCode).then((reqs) => {
         if (reqs && reqs.length > 0) {
@@ -230,10 +230,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     checkRequests();
-    const interval = setInterval(checkRequests, 4000);
+    const interval = setInterval(checkRequests, 1500);
+
+    const handleWindowFocus = () => {
+      checkRequests();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkRequests();
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       clearInterval(interval);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (unsubIncoming) unsubIncoming();
       if (unsubSent) unsubSent();
     };

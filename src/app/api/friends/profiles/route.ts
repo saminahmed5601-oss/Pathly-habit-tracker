@@ -72,14 +72,34 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET: Fetch a public profile by tag
+// GET: Fetch a public profile by tag or search profiles by query
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const tag = searchParams.get('tag');
+    const searchQuery = searchParams.get('search') || searchParams.get('q');
 
+    // 1. Search Query
+    if (searchQuery) {
+      const q = searchQuery.trim().toLowerCase().replace(/^#/, '');
+      const allProfiles = Array.from(profilesStore.values());
+
+      const matched = allProfiles.filter(p => {
+        const pTag = p.tag.toLowerCase().replace(/^#/, '');
+        const pName = p.name.toLowerCase();
+        return pTag.includes(q) || pName.includes(q);
+      });
+
+      return NextResponse.json({
+        success: true,
+        query: searchQuery,
+        profiles: matched.slice(0, 10),
+      });
+    }
+
+    // 2. Exact Tag Lookup
     if (!tag) {
-      return NextResponse.json({ success: false, error: 'tag is required' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'tag or search query is required' }, { status: 400 });
     }
 
     const formatted = cleanTag(tag);

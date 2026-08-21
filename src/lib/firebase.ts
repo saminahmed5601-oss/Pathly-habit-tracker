@@ -548,3 +548,50 @@ export async function updateFriendRequestStatusInCloud(
     }
   }
 }
+
+// Live Search Public Profiles by tag or name
+export async function searchPublicProfiles(query: string): Promise<Array<{
+  uid: string;
+  tag: string;
+  name: string;
+  photoURL?: string | null;
+  level: number;
+  streak: number;
+  bestStreak: number;
+  todayGoalTitle: string;
+}>> {
+  if (!query || !query.trim()) return [];
+  const cleanQ = query.trim().toLowerCase().replace(/^#/, '');
+
+  try {
+    const res = await fetch(`/api/friends/profiles?search=${encodeURIComponent(cleanQ)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
+        return data.profiles;
+      }
+    }
+  } catch (err) {
+    console.warn('searchPublicProfiles error:', err);
+  }
+
+  // Fallback: If query looks like a specific tag, lookup directly
+  if (cleanQ.startsWith('pathly-') || cleanQ.length >= 3) {
+    const formatted = formatFriendCode(query);
+    const single = await lookupFriendByCode(formatted);
+    if (single && single.name) {
+      return [{
+        uid: single.id,
+        tag: formatted,
+        name: single.name,
+        photoURL: single.photoURL || null,
+        level: single.level || 1,
+        streak: single.streak || 0,
+        bestStreak: single.bestStreak || 0,
+        todayGoalTitle: single.todayGoalTitle || 'Daily Habits',
+      }];
+    }
+  }
+
+  return [];
+}
