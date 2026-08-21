@@ -343,8 +343,8 @@ export async function ensureFirebaseAuth(): Promise<void> {
     if (!auth.currentUser) {
       await signInAnonymously(auth);
     }
-  } catch (err) {
-    console.warn('Anonymous auth note:', err);
+  } catch {
+    // Silently ignore if Anonymous Auth is disabled in Firebase console
   }
 }
 
