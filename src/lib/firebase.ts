@@ -1,4 +1,4 @@
-import { initializeApp, getApps, getApp, FirebaseApp, deleteApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import { 
   getAuth, 
   GoogleAuthProvider, 
@@ -31,21 +31,11 @@ export interface FirebaseConfigType {
 export function getActiveFirebaseConfig(): FirebaseConfigType | null {
   if (typeof window === 'undefined') return null;
 
-  // 1. Check if user saved custom config in UI
-  try {
-    const saved = localStorage.getItem('pathly_custom_firebase_config');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed.apiKey && parsed.authDomain && parsed.projectId) {
-        return parsed;
-      }
-    }
-  } catch {}
-
-  // 2. Check environment variables
-  if (process.env.NEXT_PUBLIC_FIREBASE_API_KEY && process.env.NEXT_PUBLIC_FIREBASE_API_KEY !== 'demo-api-key') {
+  // 1. Check environment variables first (if valid)
+  const envKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  if (envKey && envKey !== 'demo-api-key' && envKey.length > 20 && !envKey.includes('...')) {
     return {
-      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+      apiKey: envKey,
       authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
       projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
       storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
@@ -55,7 +45,27 @@ export function getActiveFirebaseConfig(): FirebaseConfigType | null {
     };
   }
 
-  return null;
+  // 2. Check if user saved custom config in localStorage
+  try {
+    const saved = localStorage.getItem('pathly_custom_firebase_config');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.apiKey && parsed.apiKey.length > 20 && !parsed.apiKey.includes('...')) {
+        return parsed;
+      }
+    }
+  } catch {}
+
+  // 3. Fallback to hardcoded verified project config
+  return {
+    apiKey: 'AIzaSyCGXIF3i1OfPZRxCAvsgAtGWSWqyXzFABw',
+    authDomain: 'pathly-e1b6e.firebaseapp.com',
+    projectId: 'pathly-e1b6e',
+    storageBucket: 'pathly-e1b6e.firebasestorage.app',
+    messagingSenderId: '888577741663',
+    appId: '1:888577741663:web:0dfd3a36cf8e47e2e71cea',
+    measurementId: 'G-QH0DSLVY99',
+  };
 }
 
 let app: FirebaseApp | null = null;
@@ -141,8 +151,9 @@ export async function loginWithGoogle(): Promise<AuthUserProfile> {
     if (firebaseErr.code === 'auth/popup-closed-by-user') {
       throw new Error('Popup was closed before completing sign-in.');
     }
-    if (firebaseErr.code === 'auth/invalid-api-key') {
-      throw new Error('Invalid Firebase API key. Please check your .env.local or Firebase config.');
+    if (firebaseErr.code === 'auth/invalid-api-key' || firebaseErr.code === 'auth/api-key-not-valid') {
+      if (typeof window !== 'undefined') localStorage.removeItem('pathly_custom_firebase_config');
+      throw new Error('Invalid API key detected. Cleaned up cached key. Please click Continue with Google again!');
     }
     
     throw new Error(firebaseErr.message || 'Google sign-in failed. Please check your Firebase settings.');
