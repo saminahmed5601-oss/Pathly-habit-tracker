@@ -1,0 +1,157 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-heading: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+
+  /* Theme: Pastel (Default Cozy) */
+  body[data-theme='pastel'] {
+    --bg-main: #FFFDF9;
+    --bg-card: #FFFFFF;
+    --bg-card-hover: #FFF9F2;
+    --border-color: #F1E5D8;
+    --text-primary: #2C2621;
+    --text-secondary: #796E65;
+    --accent-primary: #10B981;
+    --accent-peach: #FF8A65;
+    --accent-butter: #FBBF24;
+    --accent-lavender: #A78BFA;
+    --accent-matcha: #34D399;
+  }
+
+  /* Theme: Cocoa (Cozy Dark Mode) */
+  body[data-theme='cocoa'] {
+    --bg-main: #141115;
+    --bg-card: #1E1A22;
+    --bg-card-hover: #26212B;
+    --border-color: #2F2936;
+    --text-primary: #F7F4F9;
+    --text-secondary: #AFA5B8;
+    --accent-primary: #34D399;
+    --accent-peach: #FB7185;
+    --accent-butter: #FBBF24;
+    --accent-lavender: #C084FC;
+    --accent-matcha: #2DD4BF;
+  }
+
+  /* Theme: Matcha (Peaceful Green) */
+  body[data-theme='matcha'] {
+    --bg-main: #F7FAF7;
+    --bg-card: #FFFFFF;
+    --bg-card-hover: #F0F6F0;
+    --border-color: #E2ECE2;
+    --text-primary: #1D2B1F;
+    --text-secondary: #5F7361;
+    --accent-primary: #059669;
+    --accent-peach: #FB923C;
+    --accent-butter: #EAB308;
+    --accent-lavender: #818CF8;
+    --accent-matcha: #10B981;
+  }
+
+  /* Theme: Lavender Dream */
+  body[data-theme='lavender'] {
+    --bg-main: #FAF8FF;
+    --bg-card: #FFFFFF;
+    --bg-card-hover: #F4F0FF;
+    --border-color: #E9E3FC;
+    --text-primary: #241D35;
+    --text-secondary: #6E6486;
+    --accent-primary: #8B5CF6;
+    --accent-peach: #F472B6;
+    --accent-butter: #F59E0B;
+    --accent-lavender: #A855F7;
+    --accent-matcha: #10B981;
+  }
+}
+
+body {
+  background-color: var(--bg-main, #FFFDF9);
+  color: var(--text-primary, #2C2621);
+  font-family: var(--font-body), sans-serif;
+  min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading), sans-serif;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D8CEBE;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B6AA98;
+}
+
+/* Glassmorphic Utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(241, 229, 216, 0.85);
+}
+
+body[data-theme='cocoa'] .glass-panel {
+  background: rgba(30, 26, 34, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(47, 41, 54, 0.85);
+}
+
+/* Fun Floaty Animation */
+@keyframes floatSlow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(1deg);
+  }
+}
+
+.animate-float {
+  animation: floatSlow 4s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(52, 211, 153, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(52, 211, 153, 0.55);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.5s infinite;
+}
+
+/* Progress bar striping animation */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-progress {
+  background-size: 200% 100%;
+  animation: shimmer 3s infinite linear;
+}
