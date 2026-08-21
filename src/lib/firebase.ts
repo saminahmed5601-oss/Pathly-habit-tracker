@@ -76,7 +76,7 @@ export function generateFriendCode(uid: string, name?: string): string {
   return `#pathly-user${cleanUid || Math.floor(1000 + Math.random() * 9000)}`;
 }
 
-// Guarantee unique friend tag reservation in Firestore
+// Guarantee unique friend tag reservation in Firestore and Server Registry
 export async function checkAndClaimTag(
   desiredTag: string, 
   userId: string
@@ -89,38 +89,50 @@ export async function checkAndClaimTag(
     return { success: false, error: 'Tag handle must be at least 2 characters long.', tag: fullTag };
   }
 
-  if (!db) {
-    return { success: true, tag: fullTag };
-  }
-
+  // 1. Check Server API Registry
   try {
-    const tagRef = doc(db, 'taken_tags', clean);
-    const snap = await getDoc(tagRef);
-    
-    if (snap.exists()) {
-      const data = snap.data();
-      if (data.uid && data.uid !== userId) {
-        return { 
-          success: false, 
-          error: `The tag ${fullTag} is already taken by another user. Please choose a different handle!`, 
-          tag: fullTag 
-        };
-      }
+    const res = await fetch('/api/friends/tags', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ desiredTag: fullTag, uid: userId }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      return { success: false, error: data.error || `The tag ${fullTag} is already taken.`, tag: fullTag };
     }
-
-    // Reserve tag for this user
-    await setDoc(tagRef, {
-      uid: userId,
-      tag: fullTag,
-      cleanTag: clean,
-      claimedAt: new Date().toISOString()
-    }, { merge: true });
-
-    return { success: true, tag: fullTag };
   } catch (err) {
-    console.warn('Tag claim error:', err);
-    return { success: true, tag: fullTag };
+    console.warn('Server tag check note:', err);
   }
+
+  // 2. Check Firestore Registry
+  if (db) {
+    try {
+      const tagRef = doc(db, 'taken_tags', clean);
+      const snap = await getDoc(tagRef);
+      
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.uid && data.uid !== userId) {
+          return { 
+            success: false, 
+            error: `The tag ${fullTag} is already taken by another user. Please choose a different handle!`, 
+            tag: fullTag 
+          };
+        }
+      }
+
+      await setDoc(tagRef, {
+        uid: userId,
+        tag: fullTag,
+        cleanTag: clean,
+        claimedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch (err) {
+      console.warn('Firestore tag claim note:', err);
+    }
+  }
+
+  return { success: true, tag: fullTag };
 }
 
 // 1-Click Real Google Sign In (Triggers Google OAuth Popup)
@@ -145,62 +157,80 @@ export async function loginWithGoogle(): Promise<AuthUserProfile> {
     }
     if (firebaseErr.code === 'auth/unauthorized-domain') {
       const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'your domain';
-      throw new Error(`Domain "${currentHost}" is not authorized. Add it in Firebase Console > Authentication > Settings > Authorized Domains.`);
+      throw new Error(`Unauthorized Domain: Please add "${currentHost}" to Firebase Console -> Authentication -> Settings -> Authorized Domains.`);
     }
-    if (firebaseErr.code === 'auth/popup-blocked') {
-      throw new Error('The popup was blocked by your browser. Please allow popups for this site.');
-    }
-    if (firebaseErr.code === 'auth/popup-closed-by-user') {
-      throw new Error('Popup was closed before completing sign-in.');
-    }
-    
-    throw new Error(firebaseErr.message || 'Google sign-in failed.');
+    throw new Error(firebaseErr.message || 'Google Sign-In failed.');
   }
 }
 
-// Sign Out
+// Sign out user
 export async function logoutUser(): Promise<void> {
-  if (auth) {
-    try {
-      await firebaseSignOut(auth);
-    } catch {}
+  try {
+    await firebaseSignOut(auth);
+  } catch (err) {
+    console.warn('Firebase Sign Out error:', err);
   }
 }
 
-// Save complete user state to Firestore
-export async function saveUserDataToFirestore(userId: string, data: Record<string, unknown>) {
+// Sync user state to Firestore and Server Profile API
+export async function saveUserDataToFirestore(userId: string, data: Record<string, unknown>): Promise<void> {
+  const profile = (data.profile || {}) as Record<string, unknown>;
+  const dailyPlan = (data.dailyPlan || {}) as Record<string, unknown>;
+  const priorityTasks = (dailyPlan.priorityTasks || []) as Array<{ title?: string }>;
+
+  const userGoals = (data.goals || []) as Array<{
+    title: string;
+    totalMilestones: number;
+    icon?: string;
+    milestones?: Array<{ isCompleted: boolean }>;
+  }>;
+
+  const totalMilestonesCount = userGoals.reduce((acc, g) => acc + (g.totalMilestones || 0), 0);
+  const totalMilestonesCompleted = userGoals.reduce(
+    (acc, g) => acc + (g.milestones?.filter(m => m.isCompleted).length || 0), 
+    0
+  );
+
+  const activeGoals = userGoals.map(g => ({
+    title: g.title,
+    icon: g.icon || '🎯',
+    totalCount: g.totalMilestones || 1,
+    completedCount: g.milestones?.filter(m => m.isCompleted).length || 0,
+  }));
+
+  const userTag = formatFriendCode(String(data.friendCode || profile.name || 'user'));
+
+  // 1. Sync to Next.js High-Availability Server API
+  try {
+    fetch('/api/friends/profiles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uid: userId,
+        tag: userTag,
+        name: profile.name || 'Pathly Explorer',
+        photoURL: (data.photoURL as string) || null,
+        level: profile.level || 1,
+        streak: profile.streakDays || 0,
+        bestStreak: profile.bestStreak || profile.streakDays || 0,
+        todayMinutes: data.todayFocusMinutes || 0,
+        todayGoalTitle: priorityTasks[0]?.title || activeGoals[0]?.title || 'Daily Path',
+        totalMilestonesCompleted,
+        totalMilestonesCount,
+        activeGoals,
+      }),
+    }).catch(() => {});
+  } catch {}
+
+  // 2. Sync to Firestore
   if (db) {
     try {
       const userDocRef = doc(db, 'users', userId);
       await setDoc(userDocRef, { ...data, updatedAt: new Date().toISOString() }, { merge: true });
 
-      // Save public lookup profile by friendCode so friends can look up immediately
       if (data.friendCode) {
-        const code = String(data.friendCode).toUpperCase();
+        const code = formatFriendCode(String(data.friendCode));
         const publicDocRef = doc(db, 'public_profiles', code);
-        const profile = (data.profile || {}) as Record<string, unknown>;
-        const dailyPlan = (data.dailyPlan || {}) as Record<string, unknown>;
-        const priorityTasks = (dailyPlan.priorityTasks || []) as Array<{ title?: string }>;
-
-        const userGoals = (data.goals || []) as Array<{
-          title: string;
-          totalMilestones: number;
-          icon?: string;
-          milestones?: Array<{ isCompleted: boolean }>;
-        }>;
-
-        const totalMilestonesCount = userGoals.reduce((acc, g) => acc + (g.totalMilestones || 0), 0);
-        const totalMilestonesCompleted = userGoals.reduce(
-          (acc, g) => acc + (g.milestones?.filter(m => m.isCompleted).length || 0), 
-          0
-        );
-
-        const activeGoals = userGoals.map(g => ({
-          title: g.title,
-          icon: g.icon || '🎯',
-          totalCount: g.totalMilestones || 1,
-          completedCount: g.milestones?.filter(m => m.isCompleted).length || 0,
-        }));
 
         await setDoc(publicDocRef, {
           uid: userId,
@@ -223,7 +253,7 @@ export async function saveUserDataToFirestore(userId: string, data: Record<strin
     }
   }
 
-  // Backup to localStorage
+  // 3. Backup to localStorage
   if (typeof window !== 'undefined') {
     localStorage.setItem(`pathly_cloud_${userId}`, JSON.stringify({ ...data, updatedAt: new Date().toISOString() }));
   }
@@ -251,7 +281,7 @@ export async function loadUserDataFromFirestore(userId: string): Promise<Record<
   return null;
 }
 
-// Look up friend by Friend Code (Timeout-proof & instant)
+// Look up friend by Friend Code
 export async function lookupFriendByCode(friendCode: string): Promise<{
   id: string;
   name: string;
@@ -267,10 +297,9 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
   activeGoals?: Array<{ title: string; completedCount: number; totalCount: number; icon: string }>;
 }> {
   const code = formatFriendCode(friendCode);
-  const cleanId = code.replace(/[^a-z0-9]/g, '');
 
   const defaultBuddy = {
-    id: `f-${cleanId}`,
+    id: `f-${code.replace(/[^a-z0-9]/g, '')}`,
     name: code,
     avatarId: 'sprout',
     photoURL: null,
@@ -284,59 +313,59 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
     activeGoals: [],
   };
 
+  // 1. Try Server API
+  try {
+    const res = await fetch(`/api/friends/profiles?tag=${encodeURIComponent(code)}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.profile && json.profile.name) {
+        return {
+          id: json.profile.uid || defaultBuddy.id,
+          name: json.profile.name || code,
+          avatarId: 'sprout',
+          photoURL: json.profile.photoURL || null,
+          streak: json.profile.streak || 0,
+          bestStreak: json.profile.bestStreak || 0,
+          level: json.profile.level || 1,
+          todayMinutes: json.profile.todayMinutes || 0,
+          todayGoalTitle: json.profile.todayGoalTitle || 'Daily Path',
+          totalMilestonesCompleted: json.profile.totalMilestonesCompleted || 0,
+          totalMilestonesCount: json.profile.totalMilestonesCount || 0,
+          activeGoals: json.profile.activeGoals || [],
+        };
+      }
+    }
+  } catch {}
+
+  // 2. Try Firestore
   if (!db) return defaultBuddy;
 
   try {
-    const fetchPromise = (async () => {
-      try {
-        const publicDocRef = doc(db, 'public_profiles', code);
-        const publicSnap = await getDoc(publicDocRef);
-        if (publicSnap.exists()) {
-          const d = publicSnap.data();
-          return {
-            id: d.uid || defaultBuddy.id,
-            name: d.name || code,
-            avatarId: d.avatarId || 'sprout',
-            photoURL: d.photoURL || null,
-            streak: d.streak || 0,
-            bestStreak: d.bestStreak || 0,
-            level: d.level || 1,
-            todayMinutes: d.todayMinutes || 0,
-            todayGoalTitle: d.todayGoalTitle || 'Daily Path',
-            totalMilestonesCompleted: d.totalMilestonesCompleted || 0,
-            totalMilestonesCount: d.totalMilestonesCount || 0,
-            activeGoals: d.activeGoals || [],
-          };
-        }
-      } catch {
-        // silently fallback
-      }
-      return defaultBuddy;
-    })();
+    const publicDocRef = doc(db, 'public_profiles', code);
+    const publicSnap = await getDoc(publicDocRef);
+    if (publicSnap.exists()) {
+      const d = publicSnap.data();
+      return {
+        id: d.uid || defaultBuddy.id,
+        name: d.name || code,
+        avatarId: d.avatarId || 'sprout',
+        photoURL: d.photoURL || null,
+        streak: d.streak || 0,
+        bestStreak: d.bestStreak || 0,
+        level: d.level || 1,
+        todayMinutes: d.todayMinutes || 0,
+        todayGoalTitle: d.todayGoalTitle || 'Daily Path',
+        totalMilestonesCompleted: d.totalMilestonesCompleted || 0,
+        totalMilestonesCount: d.totalMilestonesCount || 0,
+        activeGoals: d.activeGoals || [],
+      };
+    }
+  } catch {}
 
-    // Max 1-second timeout so UI never hangs if Firestore is not enabled/offline
-    const timeoutPromise = new Promise<{
-      id: string;
-      name: string;
-      avatarId: string;
-      photoURL?: string | null;
-      streak: number;
-      bestStreak?: number;
-      level: number;
-      todayMinutes: number;
-      todayGoalTitle: string;
-      totalMilestonesCompleted?: number;
-      totalMilestonesCount?: number;
-      activeGoals?: Array<{ title: string; completedCount: number; totalCount: number; icon: string }>;
-    }>((resolve) => setTimeout(() => resolve(defaultBuddy), 1000));
-
-    return await Promise.race([fetchPromise, timeoutPromise]);
-  } catch {
-    return defaultBuddy;
-  }
+  return defaultBuddy;
 }
 
-// Guarantee Firebase Auth exists for Firestore security rules
+// Guarantee Firebase Auth exists
 export async function ensureFirebaseAuth(): Promise<void> {
   if (typeof window === 'undefined') return;
   try {
@@ -344,50 +373,57 @@ export async function ensureFirebaseAuth(): Promise<void> {
       await signInAnonymously(auth);
     }
   } catch {
-    // Silently ignore if Anonymous Auth is disabled in Firebase console
+    // Silently ignore if Anonymous Auth is disabled
   }
 }
 
-// Send friend request to Firestore direct inbox + outbox
+// Send friend request to Server API + Firestore Direct Inboxes
 export async function sendFriendRequestToCloud(req: Record<string, unknown>): Promise<void> {
+  const toClean = formatFriendCode(String(req.toTag || '')).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const fromClean = formatFriendCode(String(req.fromTag || '')).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const reqId = String(req.id || `req-${Date.now()}`);
+
+  const normalizedReq = {
+    ...req,
+    id: reqId,
+    toTag: `#${toClean}`,
+    fromTag: `#${fromClean}`,
+    toInbox: toClean,
+    fromInbox: fromClean,
+    status: 'pending',
+    updatedAt: new Date().toISOString(),
+  };
+
+  // 1. Deliver via Server API Route (Guaranteed cross-browser & zero-rule issues)
+  try {
+    await fetch('/api/friends/requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(normalizedReq),
+    });
+  } catch (err) {
+    console.warn('Server sendFriendRequest note:', err);
+  }
+
+  // 2. Deliver via Firestore
   await ensureFirebaseAuth();
   if (db) {
     try {
-      const toClean = formatFriendCode(String(req.toTag || '')).toLowerCase().replace(/[^a-z0-9_-]/g, '');
-      const fromClean = formatFriendCode(String(req.fromTag || '')).toLowerCase().replace(/[^a-z0-9_-]/g, '');
-      const reqId = String(req.id);
-
-      const normalizedReq = {
-        ...req,
-        id: reqId,
-        toTag: `#${toClean}`,
-        fromTag: `#${fromClean}`,
-        toInbox: toClean,
-        fromInbox: fromClean,
-        status: 'pending',
-        updatedAt: new Date().toISOString(),
-      };
-
-      // 1. Write to recipient's direct inbox (Instant delivery with no index dependency)
       const inboxDocRef = doc(db, 'inboxes', toClean, 'requests', reqId);
       await setDoc(inboxDocRef, normalizedReq, { merge: true });
 
-      // 2. Write to sender's outbox
       const outboxDocRef = doc(db, 'outboxes', fromClean, 'requests', reqId);
       await setDoc(outboxDocRef, normalizedReq, { merge: true });
 
-      // 3. Write to global friend_requests collection
       const globalDocRef = doc(db, 'friend_requests', reqId);
       await setDoc(globalDocRef, normalizedReq, { merge: true });
-
-      console.log(`[Pathly] Friend request sent from #${fromClean} to #${toClean}`);
     } catch (err) {
-      console.warn('Firestore sendFriendRequest error:', err);
+      console.warn('Firestore sendFriendRequest note:', err);
     }
   }
 }
 
-// Real-time listener for incoming friend requests from recipient's direct inbox
+// Real-time listener for incoming friend requests
 export function subscribeToIncomingFriendRequests(
   userTag: string, 
   callback: (requests: Array<Record<string, unknown>>) => void
@@ -406,15 +442,15 @@ export function subscribeToIncomingFriendRequests(
       
       callback(requests);
     }, (err) => {
-      console.warn('Realtime incoming requests subscription error:', err);
+      console.warn('Realtime incoming requests subscription note:', err);
     });
   } catch (err) {
-    console.warn('subscribeToIncomingFriendRequests setup error:', err);
+    console.warn('subscribeToIncomingFriendRequests setup note:', err);
     return null;
   }
 }
 
-// Real-time listener for sent friend requests status updates from sender's outbox
+// Real-time listener for sent friend requests
 export function subscribeToSentFriendRequests(
   userTag: string,
   callback: (requests: Array<Record<string, unknown>>) => void
@@ -430,49 +466,75 @@ export function subscribeToSentFriendRequests(
       const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       callback(requests);
     }, (err) => {
-      console.warn('Realtime sent requests subscription error:', err);
+      console.warn('Realtime sent requests subscription note:', err);
     });
   } catch (err) {
-    console.warn('subscribeToSentFriendRequests setup error:', err);
+    console.warn('subscribeToSentFriendRequests setup note:', err);
     return null;
   }
 }
 
-// Fetch incoming requests from Firestore (Direct Inbox Query)
+// Fetch incoming requests from Server API & Firestore
 export async function fetchIncomingRequestsFromCloud(userTag: string): Promise<Array<Record<string, unknown>>> {
-  if (!db || !userTag) return [];
-  await ensureFirebaseAuth();
+  if (!userTag) return [];
+  const resultsMap = new Map<string, Record<string, unknown>>();
 
+  // 1. Fetch from Server API
   try {
-    const myClean = formatFriendCode(userTag).toLowerCase().replace(/[^a-z0-9_-]/g, '');
-    const inboxColRef = collection(db, 'inboxes', myClean, 'requests');
-    const snap = await getDocs(inboxColRef);
-    
-    return snap.docs
-      .map(d => ({ id: d.id, ...d.data() }))
-      .filter((r: Record<string, unknown>) => r.status === 'pending');
-  } catch (err) {
-    console.warn('Firestore fetchIncomingRequests error:', err);
+    const clean = formatFriendCode(userTag);
+    const res = await fetch(`/api/friends/requests?tag=${encodeURIComponent(clean)}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.incoming && Array.isArray(json.incoming)) {
+        json.incoming.forEach((r: Record<string, unknown>) => {
+          resultsMap.set(String(r.id), r);
+        });
+      }
+    }
+  } catch {}
+
+  // 2. Fetch from Firestore
+  if (db) {
+    try {
+      const myClean = formatFriendCode(userTag).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const inboxColRef = collection(db, 'inboxes', myClean, 'requests');
+      const snap = await getDocs(inboxColRef);
+      
+      snap.docs.forEach(d => {
+        const data = d.data();
+        if (data.status === 'pending') {
+          resultsMap.set(d.id, { id: d.id, ...data });
+        }
+      });
+    } catch {}
   }
-  return [];
+
+  return Array.from(resultsMap.values());
 }
 
-// Update friend request status across inbox, outbox, and global collection
+// Update friend request status across Server API and Firestore
 export async function updateFriendRequestStatusInCloud(
   requestId: string, 
   status: 'accepted' | 'declined',
   toTag?: string,
   fromTag?: string
 ): Promise<void> {
+  // 1. Update Server API
+  try {
+    await fetch('/api/friends/requests', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: requestId, status }),
+    });
+  } catch {}
+
+  // 2. Update Firestore
   if (db) {
     try {
       const payload = { status, updatedAt: new Date().toISOString() };
-
-      // Update global collection
       const ref = doc(db, 'friend_requests', requestId);
       await setDoc(ref, payload, { merge: true });
 
-      // Update inboxes if tags are known
       if (toTag) {
         const toClean = formatFriendCode(toTag).toLowerCase().replace(/[^a-z0-9_-]/g, '');
         await setDoc(doc(db, 'inboxes', toClean, 'requests', requestId), payload, { merge: true });
@@ -482,7 +544,7 @@ export async function updateFriendRequestStatusInCloud(
         await setDoc(doc(db, 'outboxes', fromClean, 'requests', requestId), payload, { merge: true });
       }
     } catch (err) {
-      console.warn('Firestore updateFriendRequestStatus error:', err);
+      console.warn('Firestore updateFriendRequestStatus note:', err);
     }
   }
 }
