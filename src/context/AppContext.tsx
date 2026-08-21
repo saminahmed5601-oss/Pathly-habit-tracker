@@ -840,12 +840,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return updated;
     });
 
-    updateFriendRequestStatusInCloud(requestId, 'accepted');
+    updateFriendRequestStatusInCloud(requestId, 'accepted', req.toTag, req.fromTag);
     confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
     sounds.playLevelUp();
   }, [incomingRequests]);
 
   const declineFriendRequest = useCallback((requestId: string) => {
+    const req = incomingRequests.find(r => r.id === requestId);
     setIncomingRequests(prev => {
       const updated = prev.filter(r => r.id !== requestId);
       if (typeof window !== 'undefined') {
@@ -853,11 +854,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       return updated;
     });
-    updateFriendRequestStatusInCloud(requestId, 'declined');
+    updateFriendRequestStatusInCloud(requestId, 'declined', req?.toTag, req?.fromTag);
     sounds.playTap();
-  }, []);
+  }, [incomingRequests]);
 
   const cancelSentRequest = useCallback((requestId: string) => {
+    const req = sentRequests.find(r => r.id === requestId);
     setSentRequests(prev => {
       const updated = prev.filter(r => r.id !== requestId);
       if (typeof window !== 'undefined') {
@@ -865,9 +867,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       return updated;
     });
-    updateFriendRequestStatusInCloud(requestId, 'declined');
+    updateFriendRequestStatusInCloud(requestId, 'declined', req?.toTag, req?.fromTag);
     sounds.playTap();
-  }, []);
+  }, [sentRequests]);
 
   // Auto-sync state changes to cloud if user is signed in
   useEffect(() => {

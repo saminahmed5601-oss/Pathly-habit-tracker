@@ -4,6 +4,7 @@ import {
   GoogleAuthProvider, 
   signInWithPopup, 
   signOut as firebaseSignOut, 
+  signInAnonymously,
   Auth 
 } from 'firebase/auth';
 import { 
@@ -288,41 +289,74 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
   }
 }
 
-// Send friend request to Firestore with normalized lowercased tags
+// Guarantee Firebase Auth exists for Firestore security rules
+export async function ensureFirebaseAuth(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!auth.currentUser) {
+      await signInAnonymously(auth);
+    }
+  } catch (err) {
+    console.warn('Anonymous auth note:', err);
+  }
+}
+
+// Send friend request to Firestore direct inbox + outbox
 export async function sendFriendRequestToCloud(req: Record<string, unknown>): Promise<void> {
+  await ensureFirebaseAuth();
   if (db) {
     try {
+      const toClean = formatFriendCode(String(req.toTag || '')).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const fromClean = formatFriendCode(String(req.fromTag || '')).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      const reqId = String(req.id);
+
       const normalizedReq = {
         ...req,
-        toTag: formatFriendCode(String(req.toTag || '')).toLowerCase(),
-        fromTag: formatFriendCode(String(req.fromTag || '')).toLowerCase(),
+        id: reqId,
+        toTag: `#${toClean}`,
+        fromTag: `#${fromClean}`,
+        toInbox: toClean,
+        fromInbox: fromClean,
+        status: 'pending',
         updatedAt: new Date().toISOString(),
       };
-      const ref = doc(db, 'friend_requests', String(req.id));
-      await setDoc(ref, normalizedReq, { merge: true });
+
+      // 1. Write to recipient's direct inbox (Instant delivery with no index dependency)
+      const inboxDocRef = doc(db, 'inboxes', toClean, 'requests', reqId);
+      await setDoc(inboxDocRef, normalizedReq, { merge: true });
+
+      // 2. Write to sender's outbox
+      const outboxDocRef = doc(db, 'outboxes', fromClean, 'requests', reqId);
+      await setDoc(outboxDocRef, normalizedReq, { merge: true });
+
+      // 3. Write to global friend_requests collection
+      const globalDocRef = doc(db, 'friend_requests', reqId);
+      await setDoc(globalDocRef, normalizedReq, { merge: true });
+
+      console.log(`[Pathly] Friend request sent from #${fromClean} to #${toClean}`);
     } catch (err) {
       console.warn('Firestore sendFriendRequest error:', err);
     }
   }
 }
 
-// Real-time listener for incoming friend requests
+// Real-time listener for incoming friend requests from recipient's direct inbox
 export function subscribeToIncomingFriendRequests(
   userTag: string, 
   callback: (requests: Array<Record<string, unknown>>) => void
 ): Unsubscribe | null {
   if (!db || !userTag) return null;
+  ensureFirebaseAuth();
 
   try {
-    const cleanTag = formatFriendCode(userTag).toLowerCase();
-    const q = query(
-      collection(db, 'friend_requests'),
-      where('toTag', '==', cleanTag),
-      where('status', '==', 'pending')
-    );
+    const myClean = formatFriendCode(userTag).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const inboxColRef = collection(db, 'inboxes', myClean, 'requests');
 
-    return onSnapshot(q, (snapshot) => {
-      const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return onSnapshot(inboxColRef, (snapshot) => {
+      const requests = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter((r: Record<string, unknown>) => r.status === 'pending');
+      
       callback(requests);
     }, (err) => {
       console.warn('Realtime incoming requests subscription error:', err);
@@ -333,21 +367,19 @@ export function subscribeToIncomingFriendRequests(
   }
 }
 
-// Real-time listener for sent friend requests status updates
+// Real-time listener for sent friend requests status updates from sender's outbox
 export function subscribeToSentFriendRequests(
   userTag: string,
   callback: (requests: Array<Record<string, unknown>>) => void
 ): Unsubscribe | null {
   if (!db || !userTag) return null;
+  ensureFirebaseAuth();
 
   try {
-    const cleanTag = formatFriendCode(userTag).toLowerCase();
-    const q = query(
-      collection(db, 'friend_requests'),
-      where('fromTag', '==', cleanTag)
-    );
+    const myClean = formatFriendCode(userTag).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const outboxColRef = collection(db, 'outboxes', myClean, 'requests');
 
-    return onSnapshot(q, (snapshot) => {
+    return onSnapshot(outboxColRef, (snapshot) => {
       const requests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       callback(requests);
     }, (err) => {
@@ -359,31 +391,49 @@ export function subscribeToSentFriendRequests(
   }
 }
 
-// Fetch incoming requests from Firestore (Fallback)
+// Fetch incoming requests from Firestore (Direct Inbox Query)
 export async function fetchIncomingRequestsFromCloud(userTag: string): Promise<Array<Record<string, unknown>>> {
-  if (db) {
-    try {
-      const cleanTag = formatFriendCode(userTag).toLowerCase();
-      const q = query(
-        collection(db, 'friend_requests'), 
-        where('toTag', '==', cleanTag),
-        where('status', '==', 'pending')
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    } catch (err) {
-      console.warn('Firestore fetchIncomingRequests error:', err);
-    }
+  if (!db || !userTag) return [];
+  await ensureFirebaseAuth();
+
+  try {
+    const myClean = formatFriendCode(userTag).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const inboxColRef = collection(db, 'inboxes', myClean, 'requests');
+    const snap = await getDocs(inboxColRef);
+    
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter((r: Record<string, unknown>) => r.status === 'pending');
+  } catch (err) {
+    console.warn('Firestore fetchIncomingRequests error:', err);
   }
   return [];
 }
 
-// Update friend request status in Firestore
-export async function updateFriendRequestStatusInCloud(requestId: string, status: 'accepted' | 'declined'): Promise<void> {
+// Update friend request status across inbox, outbox, and global collection
+export async function updateFriendRequestStatusInCloud(
+  requestId: string, 
+  status: 'accepted' | 'declined',
+  toTag?: string,
+  fromTag?: string
+): Promise<void> {
   if (db) {
     try {
+      const payload = { status, updatedAt: new Date().toISOString() };
+
+      // Update global collection
       const ref = doc(db, 'friend_requests', requestId);
-      await setDoc(ref, { status, updatedAt: new Date().toISOString() }, { merge: true });
+      await setDoc(ref, payload, { merge: true });
+
+      // Update inboxes if tags are known
+      if (toTag) {
+        const toClean = formatFriendCode(toTag).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        await setDoc(doc(db, 'inboxes', toClean, 'requests', requestId), payload, { merge: true });
+      }
+      if (fromTag) {
+        const fromClean = formatFriendCode(fromTag).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        await setDoc(doc(db, 'outboxes', fromClean, 'requests', requestId), payload, { merge: true });
+      }
     } catch (err) {
       console.warn('Firestore updateFriendRequestStatus error:', err);
     }
