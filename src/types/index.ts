@@ -79,7 +79,7 @@ export interface UserProfile {
   streakShields: number;
   unlockedBadges: string[];
   soundEnabled: boolean;
-  theme: 'pastel' | 'cocoa' | 'matcha' | 'lavender';
+  theme: 'light' | 'dark';
   antiCheatEnabled: boolean;
   pacingCooldownSeconds: number;
 }

@@ -13,7 +13,8 @@ import {
   ChevronDown,
   ChevronUp,
   Award,
-  Sparkles
+  Sparkles,
+  ArrowRight
 } from 'lucide-react';
 
 interface MilestonesViewProps {
@@ -49,17 +50,17 @@ export function MilestonesView({ onOpenNewGoal }: MilestonesViewProps) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
-            Long-Term Milestones & Courses
+          <h1 className="text-xl sm:text-2xl font-black text-[var(--text-main)]">
+            Milestone Journeys
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-            Track multi-step courses with custom starting offsets and anti-cheat proof of work
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            Track multi-step courses with custom starting points
           </p>
         </div>
 
         <button
           onClick={onOpenNewGoal}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-xs transition-colors self-start sm:self-center"
+          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[var(--primary)] hover:opacity-90 text-white font-bold text-xs sm:text-sm shadow-xs transition-opacity self-start sm:self-center"
         >
           <Plus className="w-4 h-4" />
           <span>New Journey</span>
@@ -68,15 +69,12 @@ export function MilestonesView({ onOpenNewGoal }: MilestonesViewProps) {
 
       {/* Goal Cards */}
       {goals.length === 0 ? (
-        <div className="clean-card p-12 text-center bg-white dark:bg-[#151C28]">
+        <div className="clean-card p-12 text-center bg-[var(--bg-card)] border border-[var(--border)]">
           <div className="text-4xl mb-2">🎯</div>
-          <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">No active milestone journeys yet!</h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            Create your first milestone course (e.g. 12-milestone Web Dev) and set where you want to start from.
-          </p>
+          <h2 className="text-base font-bold text-[var(--text-main)]">No active journeys yet!</h2>
           <button
             onClick={onOpenNewGoal}
-            className="mt-4 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs"
+            className="mt-4 px-4 py-2 rounded-xl bg-[var(--primary)] text-white font-bold text-xs"
           >
             Create First Journey
           </button>
@@ -84,64 +82,66 @@ export function MilestonesView({ onOpenNewGoal }: MilestonesViewProps) {
       ) : (
         <div className="space-y-4">
           {goals.map((goal) => {
-            const isExpanded = expandedGoals[goal.id] !== false; // default expanded
+            const isExpanded = expandedGoals[goal.id] !== false;
             const completedCount = goal.milestones.filter(m => m.isCompleted).length;
             const progressPercent = Math.round((completedCount / goal.totalMilestones) * 100);
             const isFinished = completedCount >= goal.totalMilestones;
             const offsetCount = goal.startingOffset || 0;
 
+            // Find next incomplete milestone
+            const nextMilestone = goal.milestones.find(m => !m.isCompleted);
+
             return (
               <div
                 key={goal.id}
-                className="clean-card bg-white dark:bg-[#151C28] overflow-hidden"
+                className="clean-card bg-[var(--bg-card)] border border-[var(--border)] overflow-hidden"
               >
                 {/* Header */}
                 <div className="p-5 sm:p-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     
-                    <div className="flex items-start gap-3.5 flex-1 min-w-0">
-                      <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-2xl shrink-0">
+                    <div className="flex items-center gap-3.5 flex-1 min-w-0">
+                      <div className="w-12 h-12 rounded-xl bg-[var(--primary-light)] border border-[var(--primary)] flex items-center justify-center text-2xl shrink-0">
                         {goal.icon || '💻'}
                       </div>
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white truncate">
+                          <h2 className="text-base sm:text-lg font-black text-[var(--text-main)] truncate">
                             {goal.title}
                           </h2>
-                          {isFinished ? (
-                            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          {isFinished && (
+                            <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
                               <Award className="w-3 h-3" /> Completed!
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full capitalize">
-                              {goal.category}
                             </span>
                           )}
                         </div>
 
-                        {goal.description && (
-                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">
-                            {goal.description}
-                          </p>
-                        )}
+                        {/* Visual Step Counter Pill */}
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs font-bold text-[var(--primary)]">
+                            {completedCount} of {goal.totalMilestones} Milestones
+                          </span>
+                          {offsetCount > 0 && (
+                            <span className="text-[10px] font-bold text-[var(--text-muted)] bg-[var(--bg-card-subtle)] px-2 py-0.2 rounded border border-[var(--border)]">
+                              Started at #{offsetCount}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
 
                     {/* Progress numbers & toggles */}
                     <div className="flex items-center gap-3 self-end sm:self-center">
                       <div className="text-right">
-                        <div className="text-base font-black text-slate-900 dark:text-white">
-                          {completedCount} <span className="text-xs font-normal text-slate-400">/ {goal.totalMilestones}</span>
-                        </div>
-                        <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                          {progressPercent}% Done
+                        <div className="text-xl font-black text-[var(--text-main)]">
+                          {progressPercent}%
                         </div>
                       </div>
 
                       <button
                         onClick={() => toggleExpand(goal.id)}
-                        className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-colors"
+                        className="p-2 rounded-xl bg-[var(--bg-card-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border)] transition-colors"
                       >
                         {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
@@ -150,7 +150,7 @@ export function MilestonesView({ onOpenNewGoal }: MilestonesViewProps) {
                         onClick={() => {
                           if (confirm(`Delete "${goal.title}"?`)) deleteGoal(goal.id);
                         }}
-                        className="p-2 rounded-xl text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                        className="p-2 rounded-xl text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -158,37 +158,44 @@ export function MilestonesView({ onOpenNewGoal }: MilestonesViewProps) {
 
                   </div>
 
-                  {/* Progress Bar */}
-                  <div className="mt-4">
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                  {/* Visual Progress Bar */}
+                  <div className="mt-3">
+                    <div className="w-full bg-[var(--border)] h-2.5 rounded-full overflow-hidden">
                       <div
-                        className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                        className="bg-[var(--primary)] h-full rounded-full transition-all duration-500"
                         style={{ width: `${progressPercent}%` }}
                       />
                     </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1.5 font-medium">
-                      {offsetCount > 0 && (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                          🎯 Started from milestone #{offsetCount} (no restart)
-                        </span>
-                      )}
-                      {goal.targetDate && (
-                        <span className="flex items-center gap-1 ml-auto">
-                          <Calendar className="w-3 h-3" /> Target: {goal.targetDate}
-                        </span>
-                      )}
-                    </div>
                   </div>
+
+                  {/* Next Step Highlight Banner */}
+                  {nextMilestone && (
+                    <div 
+                      onClick={() => handleMilestoneClick(goal.id, nextMilestone)}
+                      className="mt-4 p-3 rounded-xl bg-[var(--primary-light)] border border-[var(--primary)]/30 flex items-center justify-between cursor-pointer hover:border-[var(--primary)] transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-[var(--primary)] uppercase tracking-wider">
+                          Next Up:
+                        </span>
+                        <span className="text-xs font-bold text-[var(--text-main)]">
+                          #{nextMilestone.order} {nextMilestone.title}
+                        </span>
+                      </div>
+                      <span className="text-xs font-bold text-[var(--primary)] flex items-center gap-1">
+                        Complete <ArrowRight className="w-3.5 h-3.5" />
+                      </span>
+                    </div>
+                  )}
                 </div>
 
-                {/* Milestones Grid */}
+                {/* Milestones Visual Grid */}
                 {isExpanded && (
-                  <div className="px-5 sm:px-6 pb-6 pt-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
-                    <div className="flex items-center justify-between mb-3 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      <span>Milestones Roadmap ({goal.milestones.length} Steps)</span>
-                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5" /> Proof-of-work protected
+                  <div className="px-5 sm:px-6 pb-6 pt-3 border-t border-[var(--border)] bg-[var(--bg-card-subtle)]">
+                    <div className="flex items-center justify-between mb-3 text-xs font-bold text-[var(--text-muted)]">
+                      <span>All Steps</span>
+                      <span className="text-[11px] text-[var(--primary)] flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5" /> Pacing Guard Active
                       </span>
                     </div>
 
@@ -200,22 +207,22 @@ export function MilestonesView({ onOpenNewGoal }: MilestonesViewProps) {
                           className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
                             milestone.isCompleted
                               ? milestone.wasInitialOffset
-                                ? 'bg-slate-100/80 dark:bg-slate-800/60 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300'
-                                : 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
-                              : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-emerald-400'
+                                ? 'bg-[var(--bg-card)] border-[var(--border)] text-[var(--text-muted)]'
+                                : 'bg-[var(--primary-light)] border-[var(--primary)] text-[var(--primary-text)] font-semibold'
+                              : 'bg-[var(--bg-card)] border-[var(--border)] hover:border-[var(--primary)]'
                           }`}
                         >
                           <div className="mt-0.5">
                             {milestone.isCompleted ? (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                              <CheckCircle2 className="w-4 h-4 text-[var(--primary)] shrink-0" />
                             ) : (
-                              <Circle className="w-4 h-4 text-slate-300 dark:text-slate-600 shrink-0" />
+                              <Circle className="w-4 h-4 text-[var(--text-muted)] shrink-0" />
                             )}
                           </div>
 
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold text-slate-400">
+                              <span className="text-[10px] font-black text-[var(--text-muted)]">
                                 #{milestone.order}
                               </span>
                               <span className="text-xs font-bold truncate">
@@ -224,13 +231,13 @@ export function MilestonesView({ onOpenNewGoal }: MilestonesViewProps) {
                             </div>
 
                             {milestone.wasInitialOffset && (
-                              <span className="inline-block mt-0.5 text-[9px] font-semibold text-slate-500 bg-slate-200 dark:bg-slate-700 px-1.5 py-0.2 rounded">
-                                Initial Offset
+                              <span className="inline-block mt-0.5 text-[9px] font-bold text-[var(--text-muted)] bg-[var(--border)] px-1.5 py-0.2 rounded">
+                                Starting Offset
                               </span>
                             )}
 
                             {milestone.proofNote && !milestone.wasInitialOffset && (
-                              <p className="text-[10px] text-slate-500 italic mt-0.5 line-clamp-1">
+                              <p className="text-[10px] text-[var(--text-muted)] italic mt-0.5 line-clamp-1">
                                 &ldquo;{milestone.proofNote}&rdquo;
                               </p>
                             )}

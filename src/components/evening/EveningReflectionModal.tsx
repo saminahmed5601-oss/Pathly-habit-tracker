@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { Moon, Sparkles, X, Flame, Trophy, CheckCircle2, Heart } from 'lucide-react';
+import { Moon, Sparkles, X, Flame } from 'lucide-react';
 
 interface EveningReflectionModalProps {
   isOpen: boolean;
@@ -32,54 +32,51 @@ export function EveningReflectionModal({ isOpen, onClose }: EveningReflectionMod
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-zinc-900 border border-purple-300 dark:border-purple-900/60 shadow-2xl p-6 sm:p-8 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className="relative w-full max-w-md clean-card p-6 sm:p-7 bg-[var(--bg-card)] border border-[var(--border)] shadow-2xl overflow-hidden">
         
-        {/* Ambient Top Glow */}
-        <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full bg-purple-500/20 blur-3xl pointer-events-none" />
-
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-xl text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+          className="absolute top-5 right-5 p-2 rounded-xl text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
         >
           <X className="w-5 h-5" />
         </button>
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-5">
-          <div className="p-3 rounded-2xl bg-purple-100 dark:bg-purple-950/70 text-purple-600 dark:text-purple-400 shadow-sm">
+          <div className="p-3 rounded-2xl bg-purple-500/10 text-purple-500">
             <Moon className="w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-100">
+            <h2 className="text-lg sm:text-xl font-black text-[var(--text-main)]">
               Sunset Wrap-Up
             </h2>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Celebrate your wins & preserve your streak
+            <p className="text-xs text-[var(--text-muted)]">
+              Lock in your streak for tomorrow
             </p>
           </div>
         </div>
 
-        {/* Today's Stats Summary */}
-        <div className="grid grid-cols-3 gap-2.5 mb-5">
-          <div className="p-3 rounded-2xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200/60 dark:border-purple-900/40 text-center">
-            <div className="text-[10px] text-zinc-400 font-bold uppercase">Focus</div>
-            <div className="text-base font-black text-purple-700 dark:text-purple-300 mt-0.5">
+        {/* Today's Summary */}
+        <div className="grid grid-cols-3 gap-2.5 mb-4">
+          <div className="p-3 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)] text-center">
+            <div className="text-[10px] text-[var(--text-muted)] font-black uppercase">Focus</div>
+            <div className="text-sm font-black text-purple-500 mt-0.5">
               {todayFocusMinutes}m
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40 text-center">
-            <div className="text-[10px] text-zinc-400 font-bold uppercase">Tasks</div>
-            <div className="text-base font-black text-emerald-700 dark:text-emerald-300 mt-0.5">
+          <div className="p-3 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)] text-center">
+            <div className="text-[10px] text-[var(--text-muted)] font-black uppercase">Tasks</div>
+            <div className="text-sm font-black text-[var(--primary)] mt-0.5">
               {completedTasks} Done
             </div>
           </div>
 
-          <div className="p-3 rounded-2xl bg-orange-50 dark:bg-orange-950/30 border border-orange-200/60 dark:border-orange-900/40 text-center">
-            <div className="text-[10px] text-zinc-400 font-bold uppercase">Streak</div>
-            <div className="text-base font-black text-orange-600 dark:text-orange-400 mt-0.5 flex items-center justify-center gap-1">
+          <div className="p-3 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)] text-center">
+            <div className="text-[10px] text-[var(--text-muted)] font-black uppercase">Streak</div>
+            <div className="text-sm font-black text-orange-500 mt-0.5 flex items-center justify-center gap-1">
               <Flame className="w-3.5 h-3.5 fill-orange-500 text-orange-500" />
               {profile.streakDays}d
             </div>
@@ -88,23 +85,22 @@ export function EveningReflectionModal({ isOpen, onClose }: EveningReflectionMod
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-zinc-700 dark:text-zinc-300 mb-1.5 flex items-center gap-1.5">
-              <Heart className="w-3.5 h-3.5 text-rose-500" />
-              What went well today? What did you discover?
+            <label className="block text-xs font-bold text-[var(--text-main)] mb-1.5">
+              Quick Reflection
             </label>
             <textarea
-              rows={3}
+              rows={2}
               required
               value={reflection}
               onChange={(e) => setReflection(e.target.value)}
-              placeholder="e.g. Felt focused during the morning Pomodoro, debugged the API error cleanly..."
-              className="w-full px-3.5 py-2.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-xs font-medium text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-purple-400"
+              placeholder="e.g. Mastered Next.js state and finished 2 pomodoros..."
+              className="w-full px-3.5 py-2.5 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)] text-xs text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 via-pink-600 to-amber-500 hover:from-purple-700 hover:to-amber-600 text-white font-extrabold text-sm shadow-md transition-all active:scale-98"
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-purple-600 hover:opacity-90 text-white font-bold text-xs shadow-xs transition-opacity"
           >
             <Sparkles className="w-4 h-4" />
             <span>Lock In Streak & Finish Day (+80 XP)</span>

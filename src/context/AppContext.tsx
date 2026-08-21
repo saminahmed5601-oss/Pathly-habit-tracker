@@ -67,7 +67,8 @@ interface AppContextType {
 
   // Profile & Gamification
   gainXP: (amount: number, reason?: string) => void;
-  updateTheme: (theme: 'pastel' | 'cocoa' | 'matcha' | 'lavender') => void;
+  toggleTheme: () => void;
+  isDarkMode: boolean;
   toggleSound: () => void;
   toggleAntiCheat: () => void;
   triggerCelebration: () => void;
@@ -476,8 +477,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     sounds.playTap();
   }, []);
 
-  const updateTheme = useCallback((theme: 'pastel' | 'cocoa' | 'matcha' | 'lavender') => {
-    setProfile(prev => ({ ...prev, theme }));
+  // Theme synchronizer with html.dark
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      if (profile.theme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.documentElement.classList.add('light');
+      }
+    }
+  }, [profile.theme]);
+
+  const toggleTheme = useCallback(() => {
+    setProfile(prev => {
+      const nextTheme: 'light' | 'dark' = prev.theme === 'dark' ? 'light' : 'dark';
+      return { ...prev, theme: nextTheme };
+    });
+    sounds.playTap();
   }, []);
 
   const toggleSound = useCallback(() => {
@@ -536,7 +554,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         sendCheer,
         addNewFriend,
         gainXP,
-        updateTheme,
+        toggleTheme,
+        isDarkMode: profile.theme === 'dark',
         toggleSound,
         toggleAntiCheat,
         triggerCelebration,

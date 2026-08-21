@@ -135,7 +135,7 @@ export const INITIAL_USER_PROFILE: UserProfile = {
   streakShields: 2,
   unlockedBadges: ['first-step', 'offset-master', 'focus-hero', 'streak-3'],
   soundEnabled: true,
-  theme: 'pastel',
+  theme: 'light',
   antiCheatEnabled: true,
   pacingCooldownSeconds: 45, // 45 seconds pacing between milestone claims
 };

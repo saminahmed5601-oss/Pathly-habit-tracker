@@ -1,38 +1,42 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   * {
-    border-color: #E2E8F0;
+    border-color: var(--border);
   }
 }
 
 :root {
   --bg-page: #F8FAFC;
   --bg-card: #FFFFFF;
+  --bg-card-subtle: #F1F5F9;
   --text-main: #0F172A;
   --text-muted: #64748B;
   --border: #E2E8F0;
+  --border-focus: #94A3B8;
   --primary: #10B981;
   --primary-hover: #059669;
   --primary-light: #ECFDF5;
-  --accent-orange: #F97316;
-  --accent-purple: #8B5CF6;
+  --primary-text: #047857;
 }
 
-.dark {
-  --bg-page: #0B0F17;
-  --bg-card: #151C28;
+html.dark {
+  --bg-page: #0F172A;
+  --bg-card: #1E293B;
+  --bg-card-subtle: #334155;
   --text-main: #F8FAFC;
   --text-muted: #94A3B8;
-  --border: #222F43;
+  --border: #334155;
+  --border-focus: #64748B;
   --primary: #34D399;
   --primary-hover: #10B981;
-  --primary-light: rgba(16, 185, 129, 0.12);
-  --accent-orange: #FB923C;
-  --accent-purple: #A78BFA;
+  --primary-light: rgba(16, 185, 129, 0.15);
+  --primary-text: #6EE7B7;
 }
 
-body {
+html, body {
   background-color: var(--bg-page);
   color: var(--text-main);
   font-family: var(--font-jakarta), system-ui, -apple-system, sans-serif;
@@ -40,34 +44,28 @@ body {
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-outfit), system-ui, -apple-system, sans-serif;
 }
 
-/* Crisp clean card */
+/* Card classes */
 .clean-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 1.25rem;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  border-radius: 1rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
 }
 
-.clean-card-hover {
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.clean-card-hover:hover {
-  border-color: #CBD5E1;
-  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.06);
+.clean-card-subtle {
+  background-color: var(--bg-card-subtle);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
 }
 
-.dark .clean-card-hover:hover {
-  border-color: #334155;
-  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.3);
-}
-
-/* Custom minimal scrollbar */
+/* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -76,9 +74,6 @@ h1, h2, h3, h4, h5, h6 {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
+  background: var(--border);
   border-radius: 9999px;
-}
-.dark ::-webkit-scrollbar-thumb {
-  background: #334155;
 }
