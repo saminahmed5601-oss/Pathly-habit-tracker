@@ -1,9 +1,23 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
-import { X, Cloud, ShieldCheck, Users, LogOut, Check, Copy } from 'lucide-react';
+import { 
+  X, 
+  Cloud, 
+  ShieldCheck, 
+  Users, 
+  LogOut, 
+  Check, 
+  Copy, 
+  Settings, 
+  Key, 
+  AlertCircle, 
+  ExternalLink,
+  Sparkles
+} from 'lucide-react';
 import { sounds } from '@/lib/sounds';
+import { getActiveFirebaseConfig, initFirebase } from '@/lib/firebase';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -14,20 +28,72 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const { authUser, handleGoogleSignIn, handleSignOut, friendCode } = useApp();
   const [copiedCode, setCopiedCode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [showConfigDrawer, setShowConfigDrawer] = useState(false);
+
+  // Custom Firebase Config form state
+  const [apiKey, setApiKey] = useState('');
+  const [authDomain, setAuthDomain] = useState('');
+  const [projectId, setProjectId] = useState('');
+  const [configSaved, setConfigSaved] = useState(false);
+
+  useEffect(() => {
+    const existing = getActiveFirebaseConfig();
+    if (existing) {
+      setApiKey(existing.apiKey || '');
+      setAuthDomain(existing.authDomain || '');
+      setProjectId(existing.projectId || '');
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const onSignInClick = async () => {
     try {
       setIsLoading(true);
+      setErrorMessage('');
       await handleGoogleSignIn();
       sounds.playTaskPop();
       onClose();
-    } catch (err) {
-      console.error('Sign in failed:', err);
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      if (e.message === 'CONFIG_REQUIRED') {
+        setShowConfigDrawer(true);
+        setErrorMessage('To connect with your real Google account, enter your free Firebase project keys below.');
+      } else if (e.message === 'POPUP_CLOSED') {
+        setErrorMessage('Google sign-in popup was closed before completing.');
+      } else if (e.message === 'UNAUTHORIZED_DOMAIN') {
+        setErrorMessage('Please add "localhost" to authorized domains in your Firebase Console.');
+      } else {
+        setErrorMessage(e.message || 'Failed to open Google sign-in.');
+      }
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSaveConfig = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!apiKey.trim() || !authDomain.trim() || !projectId.trim()) {
+      setErrorMessage('Please fill in API Key, Auth Domain, and Project ID.');
+      return;
+    }
+
+    const config = {
+      apiKey: apiKey.trim(),
+      authDomain: authDomain.trim(),
+      projectId: projectId.trim(),
+    };
+
+    localStorage.setItem('pathly_custom_firebase_config', JSON.stringify(config));
+    initFirebase(config);
+    setConfigSaved(true);
+    sounds.playTaskPop();
+    setTimeout(() => {
+      setConfigSaved(false);
+      setShowConfigDrawer(false);
+      onSignInClick();
+    }, 800);
   };
 
   const onSignOutClick = async () => {
@@ -45,7 +111,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="relative w-full max-w-sm clean-card p-6 bg-[var(--bg-card)] border border-[var(--border)] shadow-2xl">
+      <div className="relative w-full max-w-md clean-card p-6 bg-[var(--bg-card)] border border-[var(--border)] shadow-2xl max-h-[90vh] overflow-y-auto">
         
         {/* Close Button */}
         <button
@@ -78,7 +144,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             {/* Friend Code Box */}
             <div className="p-3.5 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)] text-left">
               <div className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)] mb-1">
-                Your Unique Friend Code
+                Your Personal Friend Code
               </div>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-mono text-sm font-black text-[var(--primary)]">
@@ -120,12 +186,21 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
             <div>
               <h2 className="text-base font-black text-[var(--text-main)]">
-                Keep Progress Safe in the Cloud
+                Sign In to Pathly
               </h2>
               <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                Sign in with Google so your habits and friend connections are never lost
+                Authenticate with Google to sync your progress safely in the cloud
               </p>
             </div>
+
+            {errorMessage && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-600 dark:text-amber-400 text-left flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span>{errorMessage}</span>
+                </div>
+              </div>
+            )}
 
             {/* Benefits */}
             <div className="space-y-2 text-left text-xs p-3.5 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)]">
@@ -137,13 +212,9 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                 <Users className="w-4 h-4 text-purple-500 shrink-0" />
                 <span>See real-time progress from friends</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Cloud className="w-4 h-4 text-teal-500 shrink-0" />
-                <span>Automatic 100% free cloud backups</span>
-              </div>
             </div>
 
-            {/* 1-Click Google Sign In */}
+            {/* 1-Click Real Google Sign In */}
             <button
               onClick={onSignInClick}
               disabled={isLoading}
@@ -167,8 +238,90 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
                 />
               </svg>
-              <span>{isLoading ? 'Signing in...' : 'Continue with Google'}</span>
+              <span>{isLoading ? 'Opening Google Login...' : 'Continue with Google'}</span>
             </button>
+
+            {/* Quick Firebase Config Toggle */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfigDrawer(!showConfigDrawer)}
+                className="text-[11px] font-bold text-[var(--text-muted)] hover:text-[var(--primary)] flex items-center justify-center gap-1 mx-auto transition-colors"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>{showConfigDrawer ? 'Hide Firebase Project Setup' : 'Connect Firebase Project (Free)'}</span>
+              </button>
+            </div>
+
+            {/* Firebase Config Drawer */}
+            {showConfigDrawer && (
+              <form onSubmit={handleSaveConfig} className="p-4 rounded-2xl bg-[var(--bg-card-subtle)] border border-[var(--border)] text-left space-y-3 mt-3 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[var(--text-main)] flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5 text-[var(--primary)]" />
+                    Firebase Project Keys
+                  </span>
+                  <a
+                    href="https://console.firebase.google.com"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-[var(--primary)] font-bold flex items-center gap-0.5 hover:underline"
+                  >
+                    Get Free Keys <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1">
+                    API Key
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="w-full px-2.5 py-1.5 rounded-lg text-xs bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-main)] focus:outline-none font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1">
+                    Auth Domain
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={authDomain}
+                    onChange={(e) => setAuthDomain(e.target.value)}
+                    placeholder="your-project.firebaseapp.com"
+                    className="w-full px-2.5 py-1.5 rounded-lg text-xs bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-main)] focus:outline-none font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1">
+                    Project ID
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={projectId}
+                    onChange={(e) => setProjectId(e.target.value)}
+                    placeholder="your-project-id"
+                    className="w-full px-2.5 py-1.5 rounded-lg text-xs bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-main)] focus:outline-none font-mono"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2 rounded-xl bg-[var(--primary)] text-white font-bold text-xs shadow-xs hover:opacity-90 transition-opacity flex items-center justify-center gap-1.5"
+                >
+                  {configSaved ? <Check className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+                  <span>{configSaved ? 'Config Saved! Launching...' : 'Save & Authenticate with Google'}</span>
+                </button>
+              </form>
+            )}
           </div>
         )}
 

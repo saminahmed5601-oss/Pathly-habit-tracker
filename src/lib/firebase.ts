@@ -17,38 +17,79 @@ import {
   query, 
   where, 
   getDocs,
-  onSnapshot,
   Firestore 
 } from 'firebase/firestore';
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'demo-api-key',
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'pathly-app.firebaseapp.com',
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'pathly-app',
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'pathly-app.appspot.com',
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '123456789',
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '1:123456789:web:abcdef',
-};
+export interface FirebaseConfigType {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  appId?: string;
+}
 
-const isConfigured = Boolean(process.env.NEXT_PUBLIC_FIREBASE_API_KEY);
+export function getActiveFirebaseConfig(): FirebaseConfigType | null {
+  if (typeof window === 'undefined') return null;
+
+  // 1. Check if user saved custom config in UI
+  try {
+    const saved = localStorage.getItem('pathly_custom_firebase_config');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.apiKey && parsed.authDomain && parsed.projectId) {
+        return parsed;
+      }
+    }
+  } catch {}
+
+  // 2. Check environment variables
+  if (process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+    return {
+      apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
+      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || '',
+      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+    };
+  }
+
+  return null;
+}
 
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 let googleProvider: GoogleAuthProvider | null = null;
 
-if (typeof window !== 'undefined') {
+export function initFirebase(config?: FirebaseConfigType | null) {
+  const activeConfig = config || getActiveFirebaseConfig();
+  if (!activeConfig || typeof window === 'undefined') return false;
+
   try {
-    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+    if (getApps().length > 0) {
+      app = getApp();
+    } else {
+      app = initializeApp(activeConfig);
+    }
     auth = getAuth(app);
     db = getFirestore(app);
     googleProvider = new GoogleAuthProvider();
+    googleProvider.setCustomParameters({ prompt: 'select_account' });
+    return true;
   } catch (err) {
-    console.warn('Firebase initialized in demo/offline mode:', err);
+    console.error('Firebase initialization error:', err);
+    return false;
   }
 }
 
-export { auth, db, googleProvider, isConfigured };
+// Initialize on module load
+if (typeof window !== 'undefined') {
+  initFirebase();
+}
+
+export { auth, db, googleProvider };
 
 export interface AuthUserProfile {
   uid: string;
@@ -58,15 +99,20 @@ export interface AuthUserProfile {
   friendCode: string;
 }
 
-// Generate unique 6-character Friend Code (e.g. PATH-8219)
 export function generateFriendCode(uid: string): string {
   const clean = uid.replace(/[^a-zA-Z0-9]/g, '').slice(-4).toUpperCase();
   return `PATH-${clean || Math.floor(1000 + Math.random() * 9000)}`;
 }
 
-// 1-Click Google Sign In
+// 1-Click Real Google Sign In (Triggers Google OAuth Popup)
 export async function loginWithGoogle(): Promise<AuthUserProfile> {
-  if (auth && googleProvider && isConfigured) {
+  const isReady = initFirebase();
+  
+  if (!isReady || !auth || !googleProvider) {
+    throw new Error('CONFIG_REQUIRED');
+  }
+
+  try {
     const result = await signInWithPopup(auth, googleProvider);
     const u = result.user;
     return {
@@ -76,69 +122,68 @@ export async function loginWithGoogle(): Promise<AuthUserProfile> {
       photoURL: u.photoURL,
       friendCode: generateFriendCode(u.uid),
     };
+  } catch (err: unknown) {
+    console.error('Google Sign In Popup Error:', err);
+    const firebaseErr = err as { code?: string; message?: string };
+    if (firebaseErr.code === 'auth/popup-closed-by-user') {
+      throw new Error('POPUP_CLOSED');
+    }
+    if (firebaseErr.code === 'auth/unauthorized-domain') {
+      throw new Error('UNAUTHORIZED_DOMAIN');
+    }
+    throw new Error(firebaseErr.message || 'SIGN_IN_FAILED');
   }
-
-  // Seamless Mock/Demo Google Login if environment keys not yet configured
-  const demoUid = `usr_${Math.floor(100000 + Math.random() * 900000)}`;
-  const mockUser: AuthUserProfile = {
-    uid: demoUid,
-    email: 'alex.dev@gmail.com',
-    displayName: 'Alex Rivers',
-    photoURL: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
-    friendCode: generateFriendCode(demoUid),
-  };
-  return mockUser;
 }
 
 // Sign Out
 export async function logoutUser(): Promise<void> {
-  if (auth && isConfigured) {
-    await firebaseSignOut(auth);
+  if (auth) {
+    try {
+      await firebaseSignOut(auth);
+    } catch {}
   }
 }
 
 // Save complete user state to Firestore
 export async function saveUserDataToFirestore(userId: string, data: Record<string, unknown>) {
-  if (!db || !isConfigured) {
-    // Save to LocalStorage under user-specific key
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(`pathly_cloud_${userId}`, JSON.stringify({ ...data, updatedAt: new Date().toISOString() }));
+  if (db) {
+    try {
+      const userDocRef = doc(db, 'users', userId);
+      await setDoc(userDocRef, { ...data, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (err) {
+      console.warn('Firestore sync error:', err);
     }
-    return;
   }
 
-  try {
-    const userDocRef = doc(db, 'users', userId);
-    await setDoc(userDocRef, { ...data, updatedAt: new Date().toISOString() }, { merge: true });
-  } catch (err) {
-    console.error('Failed to sync to Firestore:', err);
+  // Backup to localStorage
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(`pathly_cloud_${userId}`, JSON.stringify({ ...data, updatedAt: new Date().toISOString() }));
   }
 }
 
 // Fetch user state from Firestore
 export async function loadUserDataFromFirestore(userId: string): Promise<Record<string, unknown> | null> {
-  if (!db || !isConfigured) {
-    if (typeof window !== 'undefined') {
-      const item = localStorage.getItem(`pathly_cloud_${userId}`);
-      return item ? JSON.parse(item) : null;
+  if (db) {
+    try {
+      const userDocRef = doc(db, 'users', userId);
+      const snap = await getDoc(userDocRef);
+      if (snap.exists()) {
+        return snap.data();
+      }
+    } catch (err) {
+      console.warn('Firestore load error:', err);
     }
-    return null;
   }
 
-  try {
-    const userDocRef = doc(db, 'users', userId);
-    const snap = await getDoc(userDocRef);
-    if (snap.exists()) {
-      return snap.data();
-    }
-    return null;
-  } catch (err) {
-    console.error('Failed to load from Firestore:', err);
-    return null;
+  if (typeof window !== 'undefined') {
+    const item = localStorage.getItem(`pathly_cloud_${userId}`);
+    return item ? JSON.parse(item) : null;
   }
+
+  return null;
 }
 
-// Look up friend by 6-char Friend Code
+// Look up friend by Friend Code
 export async function lookupFriendByCode(friendCode: string): Promise<{
   id: string;
   name: string;
@@ -150,7 +195,7 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
 } | null> {
   const code = friendCode.trim().toUpperCase();
 
-  if (db && isConfigured) {
+  if (db) {
     try {
       const q = query(collection(db, 'users'), where('friendCode', '==', code));
       const querySnap = await getDocs(q);
@@ -167,11 +212,11 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
         };
       }
     } catch (err) {
-      console.error('Error looking up friend code:', err);
+      console.warn('Firestore friend lookup error:', err);
     }
   }
 
-  // Pre-configured buddy lookup for demo / offline
+  // Fallback demo buddies
   const sampleBuddies: Record<string, { name: string; avatarId: string; streak: number; level: number; todayMinutes: number; todayGoalTitle: string }> = {
     'PATH-MAYA': { name: 'Maya Chen', avatarId: 'fox', streak: 12, level: 5, todayMinutes: 85, todayGoalTitle: 'LeetCode Medium Graphs' },
     'PATH-LIAM': { name: 'Liam Walker', avatarId: 'cat', streak: 6, level: 4, todayMinutes: 110, todayGoalTitle: 'Tailwind UI Polish' },
