@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Navbar, TabType } from '@/components/layout/Navbar';
+import { MobileBottomNav } from '@/components/layout/MobileBottomNav';
 import { TodayView } from '@/components/dashboard/TodayView';
 import { MilestonesView } from '@/components/milestones/MilestonesView';
 import { BuddiesView } from '@/components/social/BuddiesView';
@@ -44,7 +45,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-page)] text-[var(--text-main)] transition-colors">
       
-      {/* Clean Navbar with Tabs & Auth */}
+      {/* Top Header */}
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -56,8 +57,8 @@ export default function HomePage() {
         onOpenAuth={() => setShowAuth(true)}
       />
 
-      {/* Main Tabbed Content Area */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      {/* Main Content (With safe padding for mobile bottom bar) */}
+      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-8 pb-24 sm:pb-8">
         {activeTab === 'today' && (
           <TodayView
             onOpenMorning={() => setShowMorning(true)}
@@ -83,8 +84,14 @@ export default function HomePage() {
         )}
       </main>
 
-      {/* Clean Minimal Footer */}
-      <footer className="w-full border-t border-[var(--border)] py-5 text-center text-xs text-[var(--text-muted)]">
+      {/* Native-Style Mobile Bottom Navigation Bar */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+      />
+
+      {/* Clean Minimal Footer (Hidden on tiny screens to avoid clutter) */}
+      <footer className="hidden sm:block w-full border-t border-[var(--border)] py-5 text-center text-xs text-[var(--text-muted)]">
         <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 font-medium">
             <span>🌱</span>
