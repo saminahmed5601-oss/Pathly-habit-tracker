@@ -18,8 +18,13 @@ import {
   Firestore 
 } from 'firebase/firestore';
 
+// Always guarantee the exact verified working API Key with lowercase 'l'
+const VERIFIED_API_KEY = 'AIzaSyCGXIF3ilOfPZRxCAvsgAtGWSWqyXzFABw';
+const envKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+const ACTIVE_KEY = (envKey && envKey.includes('3ilOf')) ? envKey : VERIFIED_API_KEY;
+
 export const FIREBASE_CONFIG = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyCGXIF3ilOfPZRxCAvsgAtGWSWqyXzFABw',
+  apiKey: ACTIVE_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || 'pathly-e1b6e.firebaseapp.com',
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'pathly-e1b6e',
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'pathly-e1b6e.firebasestorage.app',
@@ -76,8 +81,8 @@ export async function loginWithGoogle(): Promise<AuthUserProfile> {
       throw new Error('Google Sign-In is not enabled yet in your Firebase Console. Go to Security > Authentication > Sign-in method > Enable Google.');
     }
     if (firebaseErr.code === 'auth/unauthorized-domain') {
-      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-      throw new Error(`Domain "${currentHost}" is not authorized. In Firebase Console, go to Authentication > Settings > Authorized Domains and add "${currentHost}".`);
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'your Vercel domain';
+      throw new Error(`Domain "${currentHost}" is not authorized. In Firebase Console, go to Authentication > Settings > Authorized Domains and click Add Domain for "${currentHost}".`);
     }
     if (firebaseErr.code === 'auth/popup-blocked') {
       throw new Error('The popup was blocked by your browser. Please allow popups for this site.');
