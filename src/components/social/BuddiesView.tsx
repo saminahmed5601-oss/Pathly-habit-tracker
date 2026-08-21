@@ -38,6 +38,7 @@ export function BuddiesView() {
   // Custom Friend Code Editing State
   const [isEditingCode, setIsEditingCode] = useState(false);
   const [editHandleInput, setEditHandleInput] = useState('');
+  const [isSavingCode, setIsSavingCode] = useState(false);
 
   // Manual Add Modal / State
   const [showAddCustom, setShowAddCustom] = useState(false);
@@ -59,13 +60,27 @@ export function BuddiesView() {
     setTimeout(() => setCopiedMyCode(false), 2000);
   };
 
-  const handleSaveCustomCode = (e: React.FormEvent) => {
+  const handleSaveCustomCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editHandleInput.trim()) return;
-    updateCustomFriendCode(editHandleInput.trim());
-    setIsEditingCode(false);
-    setSuccessMsg(`🏷️ Your Friend Tag is now set to ${friendCode}!`);
-    setTimeout(() => setSuccessMsg(''), 4000);
+    setIsSavingCode(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      const res = await updateCustomFriendCode(editHandleInput.trim());
+      if (res.success) {
+        setIsEditingCode(false);
+        setSuccessMsg(`🏷️ Your Friend Tag is now reserved & set to ${friendCode}!`);
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } else {
+        setErrorMsg(res.error || 'This handle is already taken by another user. Please choose another!');
+      }
+    } catch {
+      setErrorMsg('Error reserving tag. Please try again.');
+    } finally {
+      setIsSavingCode(false);
+    }
   };
 
   const handleSendRequest = async (e: React.FormEvent) => {
@@ -150,9 +165,10 @@ export function BuddiesView() {
                 />
                 <button
                   type="submit"
-                  className="px-2 py-0.5 rounded-lg bg-[var(--primary)] text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
+                  disabled={isSavingCode}
+                  className="px-2.5 py-0.5 rounded-lg bg-[var(--primary)] disabled:opacity-50 text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
                 >
-                  Save
+                  {isSavingCode ? 'Checking...' : 'Save'}
                 </button>
                 <button
                   type="button"

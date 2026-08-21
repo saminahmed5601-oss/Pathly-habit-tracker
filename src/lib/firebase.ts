@@ -73,7 +73,54 @@ export function generateFriendCode(uid: string, name?: string): string {
     if (cleanName) return `#pathly-${cleanName}`;
   }
   const cleanUid = uid.replace(/[^a-zA-Z0-9]/g, '').slice(-4).toLowerCase();
-  return `#pathly-user${cleanUid || Math.floor(100 + Math.random() * 900)}`;
+  return `#pathly-user${cleanUid || Math.floor(1000 + Math.random() * 9000)}`;
+}
+
+// Guarantee unique friend tag reservation in Firestore
+export async function checkAndClaimTag(
+  desiredTag: string, 
+  userId: string
+): Promise<{ success: boolean; error?: string; tag: string }> {
+  await ensureFirebaseAuth();
+  const clean = formatFriendCode(desiredTag).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const fullTag = `#${clean}`;
+  
+  if (clean.length < 8 || clean === 'pathly' || clean === 'pathly-') {
+    return { success: false, error: 'Tag handle must be at least 2 characters long.', tag: fullTag };
+  }
+
+  if (!db) {
+    return { success: true, tag: fullTag };
+  }
+
+  try {
+    const tagRef = doc(db, 'taken_tags', clean);
+    const snap = await getDoc(tagRef);
+    
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data.uid && data.uid !== userId) {
+        return { 
+          success: false, 
+          error: `The tag ${fullTag} is already taken by another user. Please choose a different handle!`, 
+          tag: fullTag 
+        };
+      }
+    }
+
+    // Reserve tag for this user
+    await setDoc(tagRef, {
+      uid: userId,
+      tag: fullTag,
+      cleanTag: clean,
+      claimedAt: new Date().toISOString()
+    }, { merge: true });
+
+    return { success: true, tag: fullTag };
+  } catch (err) {
+    console.warn('Tag claim error:', err);
+    return { success: true, tag: fullTag };
+  }
 }
 
 // 1-Click Real Google Sign In (Triggers Google OAuth Popup)

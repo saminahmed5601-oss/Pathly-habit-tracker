@@ -22,6 +22,7 @@ import {
   AuthUserProfile, 
   generateFriendCode,
   formatFriendCode,
+  checkAndClaimTag,
   sendFriendRequestToCloud,
   subscribeToIncomingFriendRequests,
   subscribeToSentFriendRequests,
@@ -79,7 +80,7 @@ interface AppContextType {
   // Social & Cloud Sync
   authUser: AuthUserProfile | null;
   friendCode: string;
-  updateCustomFriendCode: (newCode: string) => void;
+  updateCustomFriendCode: (newCode: string) => Promise<{ success: boolean; error?: string }>;
   incomingRequests: FriendRequest[];
   sentRequests: FriendRequest[];
   sendFriendRequest: (targetTag: string) => Promise<{ success: boolean; message: string }>;
@@ -150,9 +151,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (cachedAuth) {
         const parsed = JSON.parse(cachedAuth);
         setAuthUser(parsed);
-        setFriendCode(parsed.friendCode || formatFriendCode(parsed.displayName || 'mahin'));
+        setFriendCode(parsed.friendCode || formatFriendCode(parsed.displayName || 'user'));
       } else {
-        const localCode = localStorage.getItem('pathly_friend_code') || '#pathly-mahin';
+        const randomDigits = Math.floor(1000 + Math.random() * 9000);
+        const generatedTag = `#pathly-user${randomDigits}`;
+        const localCode = localStorage.getItem('pathly_friend_code') || generatedTag;
         setFriendCode(formatFriendCode(localCode));
         localStorage.setItem('pathly_friend_code', formatFriendCode(localCode));
       }
@@ -163,7 +166,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsLoaded(true);
   }, []);
 
-  // Real-time listener for incoming & sent friend requests
+  // Real-time listener for incoming & sent friend requests + backup interval
   useEffect(() => {
     if (!isLoaded || !friendCode) return;
 
@@ -217,14 +220,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    // 3. Fallback Initial Fetch
-    fetchIncomingRequestsFromCloud(friendCode).then((reqs) => {
-      if (reqs && reqs.length > 0) {
-        setIncomingRequests(reqs as unknown as FriendRequest[]);
-      }
-    });
+    // 3. Fallback Initial Fetch and periodic 4-second check
+    const checkRequests = () => {
+      fetchIncomingRequestsFromCloud(friendCode).then((reqs) => {
+        if (reqs && reqs.length > 0) {
+          setIncomingRequests(reqs as unknown as FriendRequest[]);
+        }
+      });
+    };
+
+    checkRequests();
+    const interval = setInterval(checkRequests, 4000);
 
     return () => {
+      clearInterval(interval);
       if (unsubIncoming) unsubIncoming();
       if (unsubSent) unsubSent();
     };
@@ -739,8 +748,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     sounds.playTap();
   }, []);
 
-  const updateCustomFriendCode = useCallback((newCode: string) => {
-    const formatted = formatFriendCode(newCode);
+  const updateCustomFriendCode = useCallback(async (newCode: string): Promise<{ success: boolean; error?: string }> => {
+    const uid = authUser?.uid || (typeof window !== 'undefined' ? (localStorage.getItem('pathly_device_uid') || `dev-${Date.now()}`) : 'guest-user');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pathly_device_uid', uid);
+    }
+
+    const claimRes = await checkAndClaimTag(newCode, uid);
+    if (!claimRes.success) {
+      sounds.playTap();
+      return { success: false, error: claimRes.error };
+    }
+
+    const formatted = claimRes.tag;
     setFriendCode(formatted);
     if (typeof window !== 'undefined') {
       localStorage.setItem('pathly_friend_code', formatted);
@@ -751,6 +771,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
     sounds.playLevelUp();
+    return { success: true };
   }, [authUser]);
 
   const sendFriendRequest = useCallback(async (targetTag: string): Promise<{ success: boolean; message: string }> => {
