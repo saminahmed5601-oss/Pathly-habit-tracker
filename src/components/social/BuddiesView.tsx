@@ -312,7 +312,10 @@ export function BuddiesView() {
                 const isMe = user.tag.toLowerCase() === friendCode.toLowerCase();
                 const isFriend = friends.some(f => f.tagline.toLowerCase() === user.tag.toLowerCase());
                 const hasSent = sentRequests.some(r => r.toTag.toLowerCase() === user.tag.toLowerCase());
-                const letter = (user.name.charAt(0) || 'P').toUpperCase();
+                const cleanDisplayName = (user.name || '').startsWith('#')
+                  ? (user.name || '').replace(/^#pathly-/, '').replace(/^#/, '')
+                  : (user.name || user.tag.replace(/^#pathly-/, '') || 'User');
+                const letter = (cleanDisplayName.charAt(0) || 'P').toUpperCase();
 
                 return (
                   <div 
@@ -321,19 +324,19 @@ export function BuddiesView() {
                   >
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       {user.photoURL ? (
-                        <div className="w-10 h-10 rounded-xl overflow-hidden border border-purple-500/40 shrink-0 bg-purple-500/10">
+                        <div className="w-10 h-10 rounded-xl overflow-hidden border border-purple-500/40 shrink-0 bg-purple-500/10 shadow-2xs">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={user.photoURL} alt={user.name} className="w-full h-full object-cover" />
+                          <img src={user.photoURL} alt={cleanDisplayName} className="w-full h-full object-cover" />
                         </div>
                       ) : (
-                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 via-indigo-500 to-cyan-600 text-white font-black flex items-center justify-center text-sm shrink-0 select-none">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-600 text-white font-black flex items-center justify-center text-sm shrink-0 select-none shadow-2xs">
                           {letter}
                         </div>
                       )}
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-[var(--text-main)] truncate">{user.name}</span>
+                          <span className="text-xs font-bold text-[var(--text-main)] truncate">{cleanDisplayName}</span>
                           <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-500/15 text-purple-400 shrink-0">
                             Lv.{user.level || 1}
                           </span>

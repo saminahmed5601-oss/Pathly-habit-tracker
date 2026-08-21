@@ -913,11 +913,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       saveUserDataToFirestore(authUser.uid, {
         goals,
         dailyPlan,
-        profile,
+        profile: {
+          ...profile,
+          name: authUser.displayName || profile.name,
+        },
         friends,
         focusLogs,
         badges,
         friendCode,
+        displayName: authUser.displayName,
         photoURL: authUser.photoURL,
       });
     }

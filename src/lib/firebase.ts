@@ -199,6 +199,8 @@ export async function saveUserDataToFirestore(userId: string, data: Record<strin
   }));
 
   const userTag = formatFriendCode(String(data.friendCode || profile.name || 'user'));
+  const displayName = String(data.displayName || profile.name || userTag.replace('#pathly-', '') || 'Pathly Explorer');
+  const photoURL = (data.photoURL as string) || (profile.photoURL as string) || null;
 
   // 1. Sync to Next.js High-Availability Server API
   try {
@@ -208,8 +210,8 @@ export async function saveUserDataToFirestore(userId: string, data: Record<strin
       body: JSON.stringify({
         uid: userId,
         tag: userTag,
-        name: profile.name || 'Pathly Explorer',
-        photoURL: (data.photoURL as string) || null,
+        name: displayName,
+        photoURL,
         level: profile.level || 1,
         streak: profile.streakDays || 0,
         bestStreak: profile.bestStreak || profile.streakDays || 0,
@@ -234,9 +236,9 @@ export async function saveUserDataToFirestore(userId: string, data: Record<strin
 
         await setDoc(publicDocRef, {
           uid: userId,
-          name: profile.name || 'Pathly Explorer',
+          name: displayName,
           avatarId: profile.avatarId || 'sprout',
-          photoURL: (data.photoURL as string) || null,
+          photoURL,
           streak: profile.streakDays || 0,
           bestStreak: profile.bestStreak || profile.streakDays || 0,
           level: profile.level || 1,
