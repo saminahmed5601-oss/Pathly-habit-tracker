@@ -263,26 +263,72 @@ export async function restGetProfile(tag: string): Promise<Record<string, unknow
   return null;
 }
 
-// 7. Search Public Profiles
+// 7. Search Public Profiles (Intelligently Deduplicated & Ranked)
 export async function restSearchProfiles(query: string): Promise<Array<Record<string, unknown>>> {
   const cleanQ = query.trim().toLowerCase().replace(/^#/, '');
   if (!cleanQ) return [];
 
   try {
-    const res = await fetch(`${BASE_URL}/public_profiles?pageSize=30&key=${FIREBASE_API_KEY}`, { cache: 'no-store' });
+    const res = await fetch(`${BASE_URL}/public_profiles?pageSize=100&key=${FIREBASE_API_KEY}`, { cache: 'no-store' });
     if (res.ok) {
       const data = await res.json();
       if (data.documents && Array.isArray(data.documents)) {
-        const results: Array<Record<string, unknown>> = [];
+        // Deduplicate by UID (one user = one current profile) and Tag
+        const byUid = new Map<string, Record<string, unknown>>();
+
         for (const doc of data.documents) {
           const parsed = fromFirestoreFields(doc.fields);
           const pTag = String(parsed.tag || '').toLowerCase().replace(/^#/, '');
           const pName = String(parsed.name || '').toLowerCase();
+          const pUid = String(parsed.uid || pTag);
+
+          // Skip partial fragment draft tags
+          const suffix = pTag.replace('pathly-', '');
+          if (suffix.length < 3) continue;
+
           if (pTag.includes(cleanQ) || pName.includes(cleanQ)) {
-            results.push(parsed);
+            const existing = byUid.get(pUid);
+            if (!existing) {
+              byUid.set(pUid, parsed);
+            } else {
+              // Keep the latest or the one with photoURL
+              const existingHasPhoto = Boolean(existing.photoURL);
+              const currentHasPhoto = Boolean(parsed.photoURL);
+              if (currentHasPhoto && !existingHasPhoto) {
+                byUid.set(pUid, parsed);
+              } else if (String(parsed.updatedAt || '') > String(existing.updatedAt || '')) {
+                byUid.set(pUid, parsed);
+              }
+            }
           }
         }
-        return results;
+
+        // Also deduplicate by Tag
+        const byTag = new Map<string, Record<string, unknown>>();
+        for (const p of byUid.values()) {
+          const formatted = formatTag(String(p.tag || ''));
+          byTag.set(formatted.toLowerCase(), p);
+        }
+
+        const results = Array.from(byTag.values());
+
+        // Sort: Exact tag match first, then users with photoURL, then by level
+        results.sort((a, b) => {
+          const aTag = String(a.tag || '').toLowerCase();
+          const bTag = String(b.tag || '').toLowerCase();
+          const isAExact = aTag === `#pathly-${cleanQ}` || aTag === `#${cleanQ}`;
+          const isBExact = bTag === `#pathly-${cleanQ}` || bTag === `#${cleanQ}`;
+          if (isAExact && !isBExact) return -1;
+          if (!isAExact && isBExact) return 1;
+
+          const aHasPhoto = a.photoURL ? 1 : 0;
+          const bHasPhoto = b.photoURL ? 1 : 0;
+          if (bHasPhoto !== aHasPhoto) return bHasPhoto - aHasPhoto;
+
+          return (Number(b.level) || 0) - (Number(a.level) || 0);
+        });
+
+        return results.slice(0, 6);
       }
     }
   } catch (err) {

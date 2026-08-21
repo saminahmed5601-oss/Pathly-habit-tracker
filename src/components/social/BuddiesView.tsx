@@ -308,7 +308,12 @@ export function BuddiesView() {
 
           {searchResults.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {searchResults.map((user, idx) => {
+              {searchResults
+                .filter((user, idx, arr) => {
+                  const tag = (user?.tag || '').toLowerCase();
+                  return tag && arr.findIndex(u => (u?.tag || '').toLowerCase() === tag) === idx;
+                })
+                .map((user, idx) => {
                 const userTag = String(user?.tag || formatFriendCode(user?.name || `user-${idx}`)).trim();
                 const myCode = String(friendCode || '').trim();
                 const isMe = Boolean(userTag && myCode && userTag.toLowerCase() === myCode.toLowerCase());
