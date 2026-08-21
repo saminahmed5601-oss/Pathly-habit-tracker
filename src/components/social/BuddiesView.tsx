@@ -3,16 +3,29 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { AVATAR_OPTIONS } from '@/lib/constants';
-import { Flame, Heart, Copy, Check, UserPlus, Trash2, Plus, X } from 'lucide-react';
+import { Flame, Heart, Copy, Check, UserPlus, Trash2, Plus, X, Edit3 } from 'lucide-react';
 import { sounds } from '@/lib/sounds';
 
 export function BuddiesView() {
-  const { friends, sendCheer, friendCode, connectFriendByCode, removeFriend, addNewFriend } = useApp();
+  const { 
+    friends, 
+    sendCheer, 
+    friendCode, 
+    updateCustomFriendCode, 
+    connectFriendByCode, 
+    removeFriend, 
+    addNewFriend 
+  } = useApp();
+
   const [friendCodeInput, setFriendCodeInput] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [connectError, setConnectError] = useState('');
   const [copiedMyCode, setCopiedMyCode] = useState(false);
+
+  // Custom Friend Code Editing State
+  const [isEditingCode, setIsEditingCode] = useState(false);
+  const [editHandleInput, setEditHandleInput] = useState('');
 
   // Manual Add Modal / State
   const [showAddCustom, setShowAddCustom] = useState(false);
@@ -35,6 +48,15 @@ export function BuddiesView() {
     setTimeout(() => setCopiedMyCode(false), 2000);
   };
 
+  const handleSaveCustomCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editHandleInput.trim()) return;
+    updateCustomFriendCode(editHandleInput.trim());
+    setIsEditingCode(false);
+    setSuccessMsg(`🏷️ Your Friend Tag is now set to ${friendCode}!`);
+    setTimeout(() => setSuccessMsg(''), 4000);
+  };
+
   const handleConnectByCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!friendCodeInput.trim()) return;
@@ -45,7 +67,7 @@ export function BuddiesView() {
       setSuccessMsg('');
       const success = await connectFriendByCode(friendCodeInput.trim());
       if (success) {
-        setSuccessMsg(`✨ Successfully connected ${friendCodeInput.trim().toUpperCase()} to your squad!`);
+        setSuccessMsg(`✨ Successfully connected buddy to your squad!`);
         setFriendCodeInput('');
         setTimeout(() => setSuccessMsg(''), 4000);
       } else {
@@ -77,24 +99,67 @@ export function BuddiesView() {
   return (
     <div className="space-y-4 sm:space-y-6">
       
-      {/* Header & Friend Code Bar */}
+      {/* Header & Customizable Friend Code Bar */}
       <div className="clean-card p-4 sm:p-5 bg-[var(--bg-card)] border border-[var(--border)] flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)]">
-            Your Personal Friend Code
+            Your Personal Friend Tag
           </div>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="font-mono text-base sm:text-lg font-black text-[var(--primary)]">
-              {friendCode}
-            </span>
-            <button
-              onClick={handleCopyMyCode}
-              className="px-2.5 py-1.5 rounded-lg bg-[var(--primary-light)] text-[var(--primary-text)] hover:opacity-80 text-xs font-bold flex items-center gap-1 transition-opacity active:scale-95"
-            >
-              {copiedMyCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedMyCode ? 'Copied' : 'Copy'}</span>
-            </button>
-          </div>
+
+          {isEditingCode ? (
+            <form onSubmit={handleSaveCustomCode} className="flex flex-wrap items-center gap-1.5 mt-1.5">
+              <span className="font-mono text-xs sm:text-sm font-bold text-[var(--primary)]">#pathly-</span>
+              <input
+                type="text"
+                autoFocus
+                required
+                value={editHandleInput}
+                onChange={(e) => setEditHandleInput(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                placeholder="yourname"
+                className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-[var(--bg-card-subtle)] border border-[var(--primary)] text-[var(--text-main)] w-32 focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="px-2.5 py-1 rounded-lg bg-[var(--primary)] text-white text-xs font-bold shadow-xs active:scale-95 transition-all"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsEditingCode(false)}
+                className="px-2 py-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs font-medium"
+              >
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="font-mono text-base sm:text-lg font-black text-[var(--primary)]">
+                {friendCode}
+              </span>
+
+              <button
+                onClick={() => {
+                  const raw = friendCode.replace('#pathly-', '').replace('pathly-', '').replace('#', '');
+                  setEditHandleInput(raw);
+                  setIsEditingCode(true);
+                }}
+                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--primary)] hover:bg-[var(--primary-light)] text-xs font-bold flex items-center gap-1 transition-colors active:scale-95"
+                title="Change your tag (e.g. #pathly-mahin)"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span className="text-[10px] hidden sm:inline">Set Tag</span>
+              </button>
+
+              <button
+                onClick={handleCopyMyCode}
+                className="px-2.5 py-1.5 rounded-lg bg-[var(--primary-light)] text-[var(--primary-text)] hover:opacity-80 text-xs font-bold flex items-center gap-1 transition-opacity active:scale-95"
+              >
+                {copiedMyCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedMyCode ? 'Copied' : 'Copy'}</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Connect Friend Form */}
@@ -107,8 +172,8 @@ export function BuddiesView() {
               setFriendCodeInput(e.target.value);
               if (connectError) setConnectError('');
             }}
-            placeholder="Friend's Code (e.g. PATH-7821)..."
-            className="flex-1 min-w-[160px] px-3.5 py-2.5 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none uppercase font-mono"
+            placeholder="Friend's Tag (e.g. #pathly-alex)..."
+            className="flex-1 min-w-[160px] px-3.5 py-2.5 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] placeholder-[var(--text-muted)] focus:outline-none font-mono"
           />
           <button
             type="submit"
@@ -230,7 +295,7 @@ export function BuddiesView() {
             No accountability buddies connected yet
           </h2>
           <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto mb-4">
-            Share your Friend Code <strong className="text-[var(--primary)] font-mono">{friendCode}</strong> with friends, or enter their code above to connect!
+            Share your Friend Tag <strong className="text-[var(--primary)] font-mono">{friendCode}</strong> with friends, or enter their tag above to connect!
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <button
@@ -238,7 +303,7 @@ export function BuddiesView() {
               className="px-4 py-2.5 rounded-xl bg-[var(--primary)] text-white text-xs font-bold shadow-xs active:scale-95 transition-all inline-flex items-center gap-1.5"
             >
               {copiedMyCode ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedMyCode ? 'Copied Friend Code!' : 'Copy My Code'}</span>
+              <span>{copiedMyCode ? 'Copied Tag!' : 'Copy My Tag'}</span>
             </button>
 
             <button

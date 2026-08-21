@@ -56,9 +56,21 @@ export interface AuthUserProfile {
   friendCode: string;
 }
 
-export function generateFriendCode(uid: string): string {
-  const clean = uid.replace(/[^a-zA-Z0-9]/g, '').slice(-4).toUpperCase();
-  return `PATH-${clean || Math.floor(1000 + Math.random() * 9000)}`;
+export function formatFriendCode(input: string): string {
+  let clean = input.trim().toLowerCase().replace(/^#/, '');
+  if (!clean.startsWith('pathly-')) {
+    clean = `pathly-${clean}`;
+  }
+  return `#${clean}`;
+}
+
+export function generateFriendCode(uid: string, name?: string): string {
+  if (name && name.trim()) {
+    const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12);
+    if (cleanName) return `#pathly-${cleanName}`;
+  }
+  const cleanUid = uid.replace(/[^a-zA-Z0-9]/g, '').slice(-4).toLowerCase();
+  return `#pathly-user${cleanUid || Math.floor(100 + Math.random() * 900)}`;
 }
 
 // 1-Click Real Google Sign In (Triggers Google OAuth Popup)
@@ -66,12 +78,13 @@ export async function loginWithGoogle(): Promise<AuthUserProfile> {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     const u = result.user;
+    const name = u.displayName || 'mahin';
     return {
       uid: u.uid,
       email: u.email,
       displayName: u.displayName || 'Pathly Explorer',
       photoURL: u.photoURL,
-      friendCode: generateFriendCode(u.uid),
+      friendCode: generateFriendCode(u.uid, name),
     };
   } catch (err: unknown) {
     console.error('Google Sign In Popup Error:', err);
@@ -173,11 +186,11 @@ export async function lookupFriendByCode(friendCode: string): Promise<{
   todayMinutes: number;
   todayGoalTitle: string;
 }> {
-  const raw = friendCode.trim().toUpperCase();
-  const code = raw.startsWith('PATH-') ? raw : `PATH-${raw}`;
+  const code = formatFriendCode(friendCode);
+  const cleanId = code.replace(/[^a-z0-9]/g, '');
 
   const defaultBuddy = {
-    id: `f-${code.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+    id: `f-${cleanId}`,
     name: code,
     avatarId: 'sprout',
     streak: 0,

@@ -20,7 +20,8 @@ import {
   loadUserDataFromFirestore, 
   lookupFriendByCode, 
   AuthUserProfile, 
-  generateFriendCode 
+  generateFriendCode,
+  formatFriendCode 
 } from '@/lib/firebase';
 
 interface MilestoneCompletionPayload {
@@ -73,6 +74,7 @@ interface AppContextType {
   // Social & Cloud Sync
   authUser: AuthUserProfile | null;
   friendCode: string;
+  updateCustomFriendCode: (newCode: string) => void;
   handleGoogleSignIn: () => Promise<void>;
   handleSignOut: () => Promise<void>;
   connectFriendByCode: (code: string) => Promise<boolean>;
@@ -103,7 +105,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Authentication & Cloud Sync
   const [authUser, setAuthUser] = useState<AuthUserProfile | null>(null);
-  const [friendCode, setFriendCode] = useState<string>('PATH-7821');
+  const [friendCode, setFriendCode] = useState<string>('#pathly-mahin');
 
   // Anti-cheat state tracking
   const [lastMilestoneCompletedTime, setLastMilestoneCompletedTime] = useState<number | null>(null);
@@ -126,11 +128,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (cachedAuth) {
         const parsed = JSON.parse(cachedAuth);
         setAuthUser(parsed);
-        setFriendCode(parsed.friendCode || generateFriendCode(parsed.uid));
+        setFriendCode(parsed.friendCode || formatFriendCode(parsed.displayName || 'mahin'));
       } else {
-        const localCode = localStorage.getItem('pathly_friend_code') || generateFriendCode('local_user');
-        setFriendCode(localCode);
-        localStorage.setItem('pathly_friend_code', localCode);
+        const localCode = localStorage.getItem('pathly_friend_code') || '#pathly-mahin';
+        setFriendCode(formatFriendCode(localCode));
+        localStorage.setItem('pathly_friend_code', formatFriendCode(localCode));
       }
     } catch {
       // ignore
@@ -647,6 +649,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     sounds.playTap();
   }, []);
 
+  const updateCustomFriendCode = useCallback((newCode: string) => {
+    const formatted = formatFriendCode(newCode);
+    setFriendCode(formatted);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pathly_friend_code', formatted);
+      if (authUser) {
+        const updatedAuth = { ...authUser, friendCode: formatted };
+        localStorage.setItem('pathly_auth_user', JSON.stringify(updatedAuth));
+        setAuthUser(updatedAuth);
+      }
+    }
+    sounds.playLevelUp();
+  }, [authUser]);
+
   // Auto-sync state changes to cloud if user is signed in
   useEffect(() => {
     if (isLoaded && authUser) {
@@ -674,6 +690,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         badges,
         authUser,
         friendCode,
+        updateCustomFriendCode,
         handleGoogleSignIn,
         handleSignOut,
         connectFriendByCode,
