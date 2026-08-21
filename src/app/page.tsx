@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppContext';
 import { Navbar, TabType } from '@/components/layout/Navbar';
 import { MobileBottomNav } from '@/components/layout/MobileBottomNav';
@@ -21,6 +21,34 @@ export default function HomePage() {
   const { isLoaded } = useApp();
 
   const [activeTab, setActiveTab] = useState<TabType>('today');
+
+  // Restore active tab on reload from URL hash or localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const validTabs: TabType[] = ['today', 'milestones', 'friends', 'achievements'];
+      
+      // 1. Check URL hash (e.g. #friends, #milestones)
+      const hash = window.location.hash.replace('#', '') as TabType;
+      if (validTabs.includes(hash)) {
+        setActiveTab(hash);
+        return;
+      }
+
+      // 2. Check localStorage
+      const savedTab = localStorage.getItem('pathly_active_tab') as TabType;
+      if (savedTab && validTabs.includes(savedTab)) {
+        setActiveTab(savedTab);
+      }
+    }
+  }, []);
+
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pathly_active_tab', tab);
+      window.history.replaceState(null, '', `#${tab}`);
+    }
+  };
 
   // Modals state
   const [showMorning, setShowMorning] = useState(false);
@@ -48,7 +76,7 @@ export default function HomePage() {
       {/* Top Header */}
       <Navbar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
         onOpenMorning={() => setShowMorning(true)}
         onOpenFocus={() => setShowFocus(true)}
         onOpenNewGoal={() => setShowNewGoal(true)}
@@ -87,10 +115,10 @@ export default function HomePage() {
       {/* Native-Style Mobile Bottom Navigation Bar */}
       <MobileBottomNav
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleTabChange}
       />
 
-      {/* Clean Minimal Footer (Hidden on tiny screens to avoid clutter) */}
+      {/* Clean Minimal Footer */}
       <footer className="hidden sm:block w-full border-t border-[var(--border)] py-5 text-center text-xs text-[var(--text-muted)]">
         <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 font-medium">
@@ -100,9 +128,9 @@ export default function HomePage() {
           </div>
 
           <div className="flex items-center gap-4 text-xs font-semibold">
-            <button onClick={() => setActiveTab('today')} className="hover:text-[var(--primary)] transition-colors">Today</button>
-            <button onClick={() => setActiveTab('milestones')} className="hover:text-[var(--primary)] transition-colors">Milestones</button>
-            <button onClick={() => setActiveTab('friends')} className="hover:text-[var(--primary)] transition-colors">Buddies</button>
+            <button onClick={() => handleTabChange('today')} className="hover:text-[var(--primary)] transition-colors">Today</button>
+            <button onClick={() => handleTabChange('milestones')} className="hover:text-[var(--primary)] transition-colors">Milestones</button>
+            <button onClick={() => handleTabChange('friends')} className="hover:text-[var(--primary)] transition-colors">Buddies</button>
             <button onClick={() => setShowAuth(true)} className="hover:text-[var(--primary)] transition-colors">Cloud Sync</button>
           </div>
         </div>
