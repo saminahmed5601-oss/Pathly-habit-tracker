@@ -308,22 +308,26 @@ export function BuddiesView() {
 
           {searchResults.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {searchResults.map((user) => {
-                const isMe = user.tag.toLowerCase() === friendCode.toLowerCase();
-                const isFriend = friends.some(f => f.tagline.toLowerCase() === user.tag.toLowerCase());
-                const hasSent = sentRequests.some(r => r.toTag.toLowerCase() === user.tag.toLowerCase());
-                const cleanDisplayName = (user.name || '').startsWith('#')
-                  ? (user.name || '').replace(/^#pathly-/, '').replace(/^#/, '')
-                  : (user.name || user.tag.replace(/^#pathly-/, '') || 'User');
+              {searchResults.map((user, idx) => {
+                const userTag = String(user?.tag || formatFriendCode(user?.name || `user-${idx}`)).trim();
+                const myCode = String(friendCode || '').trim();
+                const isMe = Boolean(userTag && myCode && userTag.toLowerCase() === myCode.toLowerCase());
+                const isFriend = Boolean(userTag && friends.some(f => String(f?.tagline || '').toLowerCase() === userTag.toLowerCase()));
+                const hasSent = Boolean(userTag && sentRequests.some(r => String(r?.toTag || '').toLowerCase() === userTag.toLowerCase()));
+                
+                const rawName = String(user?.name || userTag || 'User');
+                const cleanDisplayName = rawName.startsWith('#')
+                  ? rawName.replace(/^#pathly-/, '').replace(/^#/, '')
+                  : (rawName || 'User');
                 const letter = (cleanDisplayName.charAt(0) || 'P').toUpperCase();
 
                 return (
                   <div 
-                    key={user.tag}
+                    key={userTag || `u-${idx}`}
                     className="p-3 rounded-xl bg-[var(--bg-card-subtle)] hover:border-purple-500/40 border border-[var(--border)] flex items-center justify-between gap-3 transition-all"
                   >
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      {user.photoURL ? (
+                      {user?.photoURL ? (
                         <div className="w-10 h-10 rounded-xl overflow-hidden border border-purple-500/40 shrink-0 bg-purple-500/10 shadow-2xs">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img src={user.photoURL} alt={cleanDisplayName} className="w-full h-full object-cover" />

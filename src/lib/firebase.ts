@@ -570,7 +570,16 @@ export async function searchPublicProfiles(query: string): Promise<Array<{
     if (res.ok) {
       const data = await res.json();
       if (data.profiles && Array.isArray(data.profiles) && data.profiles.length > 0) {
-        return data.profiles;
+        return data.profiles.map((p: Record<string, unknown>) => ({
+          uid: String(p.uid || `user-${Date.now()}`),
+          tag: formatFriendCode(String(p.tag || p.cleanTag || query)),
+          name: String(p.name || p.tag || 'Pathly Explorer'),
+          photoURL: (p.photoURL as string) || null,
+          level: Number(p.level) || 1,
+          streak: Number(p.streak) || 0,
+          bestStreak: Number(p.bestStreak) || 0,
+          todayGoalTitle: String(p.todayGoalTitle || 'Daily Habits'),
+        }));
       }
     }
   } catch (err) {
