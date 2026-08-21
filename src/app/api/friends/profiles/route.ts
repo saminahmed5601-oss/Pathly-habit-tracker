@@ -1,32 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-interface PublicProfile {
-  uid: string;
-  tag: string;
-  name: string;
-  photoURL?: string | null;
-  level: number;
-  streak: number;
-  bestStreak: number;
-  todayMinutes: number;
-  todayGoalTitle: string;
-  totalMilestonesCompleted: number;
-  totalMilestonesCount: number;
-  activeGoals: Array<{ title: string; completedCount: number; totalCount: number; icon: string }>;
-  updatedAt: string;
-}
-
-// Global server memory store for profiles
-declare global {
-  // eslint-disable-next-line no-var
-  var __PATHLY_PUBLIC_PROFILES__: Map<string, PublicProfile> | undefined;
-}
-
-if (!global.__PATHLY_PUBLIC_PROFILES__) {
-  global.__PATHLY_PUBLIC_PROFILES__ = new Map<string, PublicProfile>();
-}
-
-const profilesStore = global.__PATHLY_PUBLIC_PROFILES__;
+import { restSaveProfile, restGetProfile, restSearchProfiles } from '@/lib/firestoreRest';
 
 function cleanTag(input: string): string {
   let clean = (input || '').trim().toLowerCase().replace(/^#/, '');
@@ -36,7 +9,7 @@ function cleanTag(input: string): string {
   return `#${clean}`;
 }
 
-// POST: Save or update a public profile
+// POST: Save or update a public profile in Cloud Firestore
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -47,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     const formatted = cleanTag(tag);
-    const profile: PublicProfile = {
+    const profile = {
       uid: uid || `user-${Date.now()}`,
       tag: formatted,
       name: name || formatted,
@@ -63,7 +36,7 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date().toISOString(),
     };
 
-    profilesStore.set(formatted, profile);
+    await restSaveProfile(profile);
 
     return NextResponse.json({ success: true, profile });
   } catch (err: unknown) {
@@ -72,7 +45,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// GET: Fetch a public profile by tag or search profiles by query
+// GET: Fetch a public profile by tag or search profiles by query in Cloud Firestore
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -81,19 +54,13 @@ export async function GET(request: NextRequest) {
 
     // 1. Search Query
     if (searchQuery) {
-      const q = searchQuery.trim().toLowerCase().replace(/^#/, '');
-      const allProfiles = Array.from(profilesStore.values());
-
-      const matched = allProfiles.filter(p => {
-        const pTag = p.tag.toLowerCase().replace(/^#/, '');
-        const pName = p.name.toLowerCase();
-        return pTag.includes(q) || pName.includes(q);
-      });
-
+      const results = await restSearchProfiles(searchQuery);
       return NextResponse.json({
         success: true,
         query: searchQuery,
-        profiles: matched.slice(0, 10),
+        profiles: results.slice(0, 10),
+      }, {
+        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
       });
     }
 
@@ -103,7 +70,7 @@ export async function GET(request: NextRequest) {
     }
 
     const formatted = cleanTag(tag);
-    const profile = profilesStore.get(formatted);
+    const profile = await restGetProfile(formatted);
 
     if (!profile) {
       return NextResponse.json({
@@ -126,7 +93,9 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ success: true, profile });
+    return NextResponse.json({ success: true, profile }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ success: false, error: message }, { status: 500 });

@@ -1,29 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-interface FriendRequestItem {
-  id: string;
-  fromUid: string;
-  fromName: string;
-  fromTag: string;
-  fromPhotoURL?: string | null;
-  fromLevel: number;
-  toTag: string;
-  status: 'pending' | 'accepted' | 'declined';
-  createdAt: string;
-  updatedAt?: string;
-}
-
-// Global server memory store (persists across requests during runtime)
-declare global {
-  // eslint-disable-next-line no-var
-  var __PATHLY_FRIEND_REQUESTS__: Map<string, FriendRequestItem> | undefined;
-}
-
-if (!global.__PATHLY_FRIEND_REQUESTS__) {
-  global.__PATHLY_FRIEND_REQUESTS__ = new Map<string, FriendRequestItem>();
-}
-
-const requestsStore = global.__PATHLY_FRIEND_REQUESTS__;
+import { restSaveFriendRequest, restGetFriendRequests, restUpdateRequestStatus } from '@/lib/firestoreRest';
 
 function cleanTag(input: string): string {
   let clean = (input || '').trim().toLowerCase().replace(/^#/, '');
@@ -33,7 +9,7 @@ function cleanTag(input: string): string {
   return `#${clean}`;
 }
 
-// GET: Fetch incoming and sent requests for a tag
+// GET: Fetch incoming and sent requests for a tag across all serverless instances
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -44,21 +20,17 @@ export async function GET(request: NextRequest) {
     }
 
     const myTag = cleanTag(tagParam);
-    const all = Array.from(requestsStore.values());
-
-    const incoming = all.filter(
-      (r) => cleanTag(r.toTag) === myTag && r.status === 'pending'
-    );
-
-    const sent = all.filter(
-      (r) => cleanTag(r.fromTag) === myTag
-    );
+    const { incoming, sent } = await restGetFriendRequests(myTag);
 
     return NextResponse.json({
       success: true,
       tag: myTag,
       incoming,
       sent,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      }
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -66,7 +38,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST: Create and send a new friend request
+// POST: Create and send a new friend request to Cloud Firestore
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -85,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     const reqId = id || `req-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    const newRequest: FriendRequestItem = {
+    const newRequest = {
       id: reqId,
       fromUid: fromUid || `user-${Date.now()}`,
       fromName: fromName || senderTag,
@@ -93,12 +65,12 @@ export async function POST(request: NextRequest) {
       fromPhotoURL: fromPhotoURL || null,
       fromLevel: fromLevel || 1,
       toTag: recipientTag,
-      status: 'pending',
+      status: 'pending' as const,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    requestsStore.set(reqId, newRequest);
+    await restSaveFriendRequest(newRequest);
 
     return NextResponse.json({
       success: true,
@@ -121,18 +93,11 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'id and status are required' }, { status: 400 });
     }
 
-    const existing = requestsStore.get(id);
-    if (!existing) {
-      return NextResponse.json({ success: false, error: 'Request not found' }, { status: 404 });
-    }
-
-    existing.status = status;
-    existing.updatedAt = new Date().toISOString();
-    requestsStore.set(id, existing);
+    await restUpdateRequestStatus(id, status);
 
     return NextResponse.json({
       success: true,
-      request: existing,
+      message: `Request status updated to ${status}`,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
