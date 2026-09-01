@@ -10,6 +10,7 @@ export function BuddiesView() {
   const { 
     friends, 
     sendCheer, 
+    sendWaterDrop,
     friendCode, 
     updateCustomFriendCode, 
     incomingRequests,
@@ -48,13 +49,15 @@ export function BuddiesView() {
   useEffect(() => {
     const query = friendTagInput.trim();
     if (!query || query.length < 2) {
-      setSearchResults([]);
-      setIsSearching(false);
-      return;
+      const clearTimer = setTimeout(() => {
+        setSearchResults([]);
+        setIsSearching(false);
+      }, 0);
+      return () => clearTimeout(clearTimer);
     }
 
-    setIsSearching(true);
     const timer = setTimeout(async () => {
+      setIsSearching(true);
       try {
         const results = await searchPublicProfiles(query);
         setSearchResults(results);
@@ -67,6 +70,7 @@ export function BuddiesView() {
 
     return () => clearTimeout(timer);
   }, [friendTagInput]);
+
 
   // Selected Buddy for Full Progress Modal
   const [selectedBuddy, setSelectedBuddy] = useState<FriendBuddy | null>(null);
@@ -591,6 +595,17 @@ export function BuddiesView() {
             </div>
 
             <div>
+              <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1">Tagline / Motto</label>
+              <input
+                type="text"
+                value={customTagline}
+                onChange={(e) => setCustomTagline(e.target.value)}
+                placeholder="e.g. Grinding every day"
+                className="w-full px-3 py-2 rounded-xl text-xs bg-[var(--bg-card-subtle)] border border-[var(--border)] text-[var(--text-main)] focus:outline-none"
+              />
+            </div>
+
+            <div>
               <label className="block text-[10px] font-bold text-[var(--text-muted)] uppercase mb-1">Today Goal</label>
               <input
                 type="text"
@@ -704,6 +719,21 @@ export function BuddiesView() {
                     </div>
                   </div>
 
+                  {/* Live Focus / Plant Status Badge */}
+                  <div className="p-2 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15 flex items-center justify-between text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+                    <span className="flex items-center gap-1.5 truncate">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                      <span className="truncate">
+                        {friend.focusStatus?.activity 
+                          ? `${friend.focusStatus.activity} (${friend.focusStatus.minutesLeft || 25}m left)` 
+                          : `${friend.todayGoalTitle || 'Coding'} (${Math.max(15, 60 - friend.todayMinutes)}m left)`}
+                      </span>
+                    </span>
+                    <span className="text-[10px] font-black shrink-0 ml-1">
+                      {friend.focusStatus?.plantStage || '🌱 Sprout'}
+                    </span>
+                  </div>
+
                   {/* Today's Goal Progress */}
                   <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--bg-card-subtle)] border border-[var(--border)]">
                     <div className="flex justify-between text-[11px] sm:text-xs font-semibold text-[var(--text-main)] mb-1">
@@ -747,14 +777,28 @@ export function BuddiesView() {
                   )}
                 </div>
 
-                {/* 1-Tap Cheer Boost Buttons */}
-                <div className="pt-2.5 border-t border-[var(--border)]">
+                {/* 1-Tap Cheer Boost & Send Water Drop Action */}
+                <div className="pt-2.5 border-t border-[var(--border)] space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    {/* Dedicated Send Water Drop Reaction Button */}
+                    <button
+                      type="button"
+                      onClick={() => sendWaterDrop(friend.id)}
+                      className="flex-1 py-2 px-3 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 active:scale-95 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
+                      title="Hydrate buddy's virtual plant"
+                    >
+                      <span className="text-sm animate-bounce">💧</span>
+                      <span>Send Water Drop</span>
+                    </button>
+                  </div>
+
+                  {/* Quick Cheer Emojis */}
                   <div className="grid grid-cols-4 gap-1.5">
                     {CHEER_EMOJIS.map((c) => (
                       <button
                         key={c.emoji}
                         onClick={() => sendCheer(friend.id, c.emoji, c.label)}
-                        className="py-2.5 rounded-xl bg-[var(--bg-card-subtle)] hover:bg-purple-500/15 border border-[var(--border)] text-lg hover:scale-105 active:scale-95 transition-all"
+                        className="py-2 rounded-xl bg-[var(--bg-card-subtle)] hover:bg-purple-500/15 border border-[var(--border)] text-base hover:scale-105 active:scale-95 transition-all cursor-pointer"
                         title={c.label}
                       >
                         {c.emoji}

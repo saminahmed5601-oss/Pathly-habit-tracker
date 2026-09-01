@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { AVATAR_OPTIONS } from '@/lib/constants';
-import { Users, Flame, Heart, Plus, Sparkles, Send } from 'lucide-react';
+import { Users, Flame, Heart, Plus } from 'lucide-react';
 
 export function FriendsPod() {
   const { friends, sendCheer, addNewFriend } = useApp();

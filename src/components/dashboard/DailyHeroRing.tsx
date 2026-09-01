@@ -4,6 +4,7 @@ import React from 'react';
 import { useApp } from '@/context/AppContext';
 import { sounds } from '@/lib/sounds';
 import { Sparkles, Clock, CheckCircle2, Trophy, Sun, Moon } from 'lucide-react';
+import { getLocalDateString } from '@/lib/dateUtils';
 
 interface DailyHeroRingProps {
   onOpenFocus: () => void;
@@ -12,14 +13,15 @@ interface DailyHeroRingProps {
 }
 
 export function DailyHeroRing({ onOpenFocus, onOpenMorning, onOpenEvening }: DailyHeroRingProps) {
-  const { dailyPlan, focusLogs, profile, goals } = useApp();
+  const { dailyPlan, focusLogs, goals } = useApp();
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
   
   // Total focus minutes today
   const todayFocusMinutes = focusLogs
     .filter(log => log.date === todayStr)
     .reduce((acc, log) => acc + log.durationMinutes, 0);
+
 
   const targetMinutes = dailyPlan.targetFocusMinutes || 120;
   const timeProgressPercent = Math.min(100, Math.round((todayFocusMinutes / targetMinutes) * 100));

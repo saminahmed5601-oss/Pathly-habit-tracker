@@ -13,8 +13,6 @@ import {
   setDoc, 
   getDoc, 
   collection, 
-  query, 
-  where, 
   getDocs,
   onSnapshot,
   Unsubscribe,

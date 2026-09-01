@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { X, Sparkles, Target, ShieldCheck, Sun, Users, Flame } from 'lucide-react';
+import { X, Sparkles, Target, ShieldCheck, Sun, Flame } from 'lucide-react';
 
 interface HelpGuideModalProps {
   isOpen: boolean;

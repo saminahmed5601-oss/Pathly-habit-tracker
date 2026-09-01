@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
 import { AVATAR_OPTIONS } from '@/lib/constants';
 import { sounds } from '@/lib/sounds';
-import { Share2, X, Copy, Check, Flame, Clock, Trophy } from 'lucide-react';
+import { getLocalDateString } from '@/lib/dateUtils';
+import { Share2, X, Copy, Check, Flame } from 'lucide-react';
 
 interface ShareProgressCardModalProps {
   isOpen: boolean;
@@ -18,10 +19,11 @@ export function ShareProgressCardModal({ isOpen, onClose }: ShareProgressCardMod
   if (!isOpen) return null;
 
   const currentAvatar = AVATAR_OPTIONS.find(a => a.id === profile.avatarId) || AVATAR_OPTIONS[0];
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
   const todayFocusMinutes = focusLogs
     .filter(log => log.date === todayStr)
     .reduce((acc, log) => acc + log.durationMinutes, 0);
+
 
   const completedTasks = dailyPlan.priorityTasks.filter(t => t.completed).length;
   const totalTasks = dailyPlan.priorityTasks.length;

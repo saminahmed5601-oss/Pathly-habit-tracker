@@ -1,17 +1,36 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
-import { Goal, DailyPlan, UserProfile, FriendBuddy, FocusSessionLog, Badge, GoalCategory, MilestoneItem, FriendRequest } from '@/types';
+import { 
+  Goal, 
+  DailyPlan, 
+  UserProfile, 
+  FriendBuddy, 
+  FocusSessionLog, 
+  Badge, 
+  GoalCategory, 
+  MilestoneItem, 
+  FriendRequest,
+  DailyProgress,
+  XPReward,
+  XPRewardSourceType,
+  PriorityTask,
+  PlantSpecies
+} from '@/types';
 import {
   getStoredGoals, saveStoredGoals,
   getStoredDailyPlan, saveStoredDailyPlan,
   getStoredProfile, saveStoredProfile,
   getStoredFriends, saveStoredFriends,
   getStoredFocusLogs, saveStoredFocusLogs,
-  getStoredBadges, saveStoredBadges
+  getStoredBadges, saveStoredBadges,
+  saveStoredDailyProgress, getInitializedDailyProgress,
+  saveStoredXPRewards, getInitializedXPRewards,
+  exportAllDataJSON, importAllDataJSON
 } from '@/lib/storage';
-import { INITIAL_GOALS, INITIAL_DAILY_PLAN, INITIAL_USER_PROFILE, INITIAL_FRIENDS, DEFAULT_BADGES } from '@/lib/constants';
+import { INITIAL_GOALS, INITIAL_DAILY_PLAN, INITIAL_USER_PROFILE, INITIAL_FRIENDS, DEFAULT_BADGES, PLANT_SPECIES_LIST } from '@/lib/constants';
+import { getLocalDateString } from '@/lib/dateUtils';
 import { sounds } from '@/lib/sounds';
 import { 
   loginWithGoogle, 
@@ -20,7 +39,6 @@ import {
   loadUserDataFromFirestore, 
   lookupFriendByCode, 
   AuthUserProfile, 
-  generateFriendCode,
   formatFriendCode,
   checkAndClaimTag,
   sendFriendRequestToCloud,
@@ -45,6 +63,8 @@ interface AppContextType {
   friends: FriendBuddy[];
   focusLogs: FocusSessionLog[];
   badges: Badge[];
+  dailyProgress: DailyProgress[];
+  xpRewards: XPReward[];
   
   // Anti-Cheat State
   lastMilestoneCompletedTime: number | null;
@@ -69,10 +89,10 @@ interface AppContextType {
 
   // Daily Tasks & Morning/Evening Rituals
   togglePriorityTask: (taskId: string) => void;
-  addPriorityTask: (title: string, goalId?: string, estimatedMinutes?: number) => void;
+  addPriorityTask: (title: string, goalId?: string, estimatedMinutes?: number, isMustWin?: boolean) => void;
   deletePriorityTask: (taskId: string) => void;
-  updateMorningPlan: (data: { targetFocusMinutes: number; tasks: { title: string; goalId?: string; estimatedMinutes?: number }[]; gratitudeNote?: string }) => void;
-  updateEveningReflection: (reflection: string) => void;
+  updateMorningPlan: (data: { targetFocusMinutes: number; tasks: { title: string; goalId?: string; estimatedMinutes?: number; isMustWin?: boolean }[]; gratitudeNote?: string }) => void;
+  updateEveningReflection: (data: { reflection: string; energyRating?: number; dailyWin?: string }) => void;
 
   // Focus Sessions
   recordFocusSession: (data: { durationMinutes: number; goalId?: string; taskTitle: string; notes?: string }) => void;
@@ -93,78 +113,126 @@ interface AppContextType {
   connectFriendByCode: (code: string) => Promise<boolean>;
   removeFriend: (friendId: string) => void;
   sendCheer: (friendId: string, emoji: string, label: string) => void;
+  sendWaterDrop: (friendId: string) => void;
   addNewFriend: (data: { name: string; avatarId: string; tagline: string; todayGoalTitle: string }) => void;
 
-  // Profile & Gamification
+  // Gamification, Power-Ups, Plant Shop & Badges
   gainXP: (amount: number, reason?: string) => void;
+  awardXPOnce: (params: {
+    amount: number;
+    sourceType: XPRewardSourceType;
+    sourceId: string;
+    description?: string;
+    date?: string;
+  }) => boolean;
+  hasXPRewardBeenAwarded: (sourceType: XPRewardSourceType, sourceId: string) => boolean;
+  recordDailyProgress: (updater: (prev: DailyProgress[]) => DailyProgress[]) => void;
+  getDailyProgressForDate: (dateStr: string) => DailyProgress | undefined;
+  buyStreakShield: () => { success: boolean; message: string };
+  buyPlantSeed: (species: PlantSpecies) => { success: boolean; message: string };
+  setActivePlant: (species: PlantSpecies) => void;
+  unlockBadge: (badgeId: string) => void;
+
+  // Settings, Customization & Data Management
   toggleTheme: () => void;
   isDarkMode: boolean;
+  updateProfile: (updates: Partial<UserProfile>) => void;
+  setThemeAccent: (accent: 'emerald' | 'indigo' | 'rose' | 'amber' | 'cyan' | 'coral') => void;
+  setDarkStyle: (style: 'obsidian' | 'oled' | 'midnight' | 'coffee') => void;
   toggleSound: () => void;
+  setSfxVolume: (vol: number) => void;
   toggleAntiCheat: () => void;
   triggerCelebration: () => void;
   resetAllDemoData: () => void;
+  exportDataJSON: () => string;
+  importDataJSON: (jsonStr: string) => boolean;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
-  const [goals, setGoals] = useState<Goal[]>(INITIAL_GOALS);
-  const [dailyPlan, setDailyPlan] = useState<DailyPlan>(INITIAL_DAILY_PLAN);
-  const [profile, setProfile] = useState<UserProfile>(INITIAL_USER_PROFILE);
-  const [friends, setFriends] = useState<FriendBuddy[]>(INITIAL_FRIENDS);
-  const [focusLogs, setFocusLogs] = useState<FocusSessionLog[]>([]);
-  const [badges, setBadges] = useState<Badge[]>(DEFAULT_BADGES);
+  const [goals, setGoals] = useState<Goal[]>(() => (typeof window !== 'undefined' ? getStoredGoals() : INITIAL_GOALS));
+  const [dailyPlan, setDailyPlan] = useState<DailyPlan>(() => (typeof window !== 'undefined' ? getStoredDailyPlan() : INITIAL_DAILY_PLAN));
+  const [profile, setProfile] = useState<UserProfile>(() => (typeof window !== 'undefined' ? getStoredProfile() : INITIAL_USER_PROFILE));
+  const [friends, setFriends] = useState<FriendBuddy[]>(() => (typeof window !== 'undefined' ? getStoredFriends() : INITIAL_FRIENDS));
+  const [focusLogs, setFocusLogs] = useState<FocusSessionLog[]>(() => (typeof window !== 'undefined' ? getStoredFocusLogs() : []));
+  const [badges, setBadges] = useState<Badge[]>(() => (typeof window !== 'undefined' ? getStoredBadges() : DEFAULT_BADGES));
+  const [dailyProgress, setDailyProgress] = useState<DailyProgress[]>(() => (typeof window !== 'undefined' ? getInitializedDailyProgress() : []));
+  const [xpRewards, setXpRewards] = useState<XPReward[]>(() => (typeof window !== 'undefined' ? getInitializedXPRewards() : []));
+
+  // Ref to hold the latest rewards ledger to guarantee instantaneous synchronous idempotent checks
+  const xpRewardsRef = useRef<XPReward[]>([]);
+
+  // Keep ref synchronized with state
+  useEffect(() => {
+    xpRewardsRef.current = xpRewards;
+  }, [xpRewards]);
 
   // Authentication & Cloud Sync
-  const [authUser, setAuthUser] = useState<AuthUserProfile | null>(null);
-  const [friendCode, setFriendCode] = useState<string>('#pathly-mahin');
+  const [authUser, setAuthUser] = useState<AuthUserProfile | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cachedAuth = localStorage.getItem('pathly_auth_user');
+        return cachedAuth ? JSON.parse(cachedAuth) : null;
+      } catch {}
+    }
+    return null;
+  });
+
+  const [friendCode, setFriendCode] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const cachedAuth = localStorage.getItem('pathly_auth_user');
+        if (cachedAuth) {
+          const parsed = JSON.parse(cachedAuth);
+          return parsed.friendCode || formatFriendCode(parsed.displayName || 'user');
+        }
+        const randomDigits = Math.floor(1000 + Math.random() * 9000);
+        const generatedTag = `#pathly-user${randomDigits}`;
+        const localCode = localStorage.getItem('pathly_friend_code') || generatedTag;
+        return formatFriendCode(localCode);
+      } catch {}
+    }
+    return '#pathly-mahin';
+  });
 
   // Friend Requests State
-  const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
-  const [sentRequests, setSentRequests] = useState<FriendRequest[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const storedInc = localStorage.getItem('pathly_incoming_requests_v2');
+        return storedInc ? JSON.parse(storedInc) : [];
+      } catch {}
+    }
+    return [];
+  });
+
+  const [sentRequests, setSentRequests] = useState<FriendRequest[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const storedSent = localStorage.getItem('pathly_sent_requests_v2');
+        return storedSent ? JSON.parse(storedSent) : [];
+      } catch {}
+    }
+    return [];
+  });
 
   // Anti-cheat state tracking
   const [lastMilestoneCompletedTime, setLastMilestoneCompletedTime] = useState<number | null>(null);
   const [antiCheatModalTarget, setAntiCheatModalTarget] = useState<{ goalId: string; milestone: MilestoneItem } | null>(null);
 
-  // Initial client hydration from LocalStorage
+  // Initial client hydration from LocalStorage & safe data migration
   useEffect(() => {
-    setGoals(getStoredGoals());
-    setDailyPlan(getStoredDailyPlan());
-    const storedProf = getStoredProfile();
-    setProfile(storedProf);
-    sounds.setMuted(!storedProf.soundEnabled);
-    setFriends(getStoredFriends());
-    setFocusLogs(getStoredFocusLogs());
-    setBadges(getStoredBadges());
-
-    // Restore cached requests & auth
-    try {
-      const storedInc = localStorage.getItem('pathly_incoming_requests_v2');
-      if (storedInc) setIncomingRequests(JSON.parse(storedInc));
-
-      const storedSent = localStorage.getItem('pathly_sent_requests_v2');
-      if (storedSent) setSentRequests(JSON.parse(storedSent));
-
-      const cachedAuth = localStorage.getItem('pathly_auth_user');
-      if (cachedAuth) {
-        const parsed = JSON.parse(cachedAuth);
-        setAuthUser(parsed);
-        setFriendCode(parsed.friendCode || formatFriendCode(parsed.displayName || 'user'));
-      } else {
-        const randomDigits = Math.floor(1000 + Math.random() * 9000);
-        const generatedTag = `#pathly-user${randomDigits}`;
-        const localCode = localStorage.getItem('pathly_friend_code') || generatedTag;
-        setFriendCode(formatFriendCode(localCode));
-        localStorage.setItem('pathly_friend_code', formatFriendCode(localCode));
-      }
-    } catch {
-      // ignore
+    sounds.setMuted(!profile.soundEnabled);
+    if (profile.sfxVolume !== undefined) {
+      sounds.setSfxVolume(profile.sfxVolume);
     }
-
-    setIsLoaded(true);
-  }, []);
+    const timer = setTimeout(() => {
+      setIsLoaded(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [profile.soundEnabled, profile.sfxVolume]);
 
   // Real-time listener for incoming & sent friend requests + backup interval
   useEffect(() => {
@@ -254,7 +322,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [friendCode, isLoaded]);
 
-  // Save changes
+  // Save changes to localStorage
   useEffect(() => {
     if (isLoaded) saveStoredGoals(goals);
   }, [goals, isLoaded]);
@@ -267,6 +335,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (isLoaded) {
       saveStoredProfile(profile);
       sounds.setMuted(!profile.soundEnabled);
+      if (profile.sfxVolume !== undefined) {
+        sounds.setSfxVolume(profile.sfxVolume);
+      }
     }
   }, [profile, isLoaded]);
 
@@ -282,6 +353,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (isLoaded) saveStoredBadges(badges);
   }, [badges, isLoaded]);
 
+  useEffect(() => {
+    if (isLoaded) saveStoredDailyProgress(dailyProgress);
+  }, [dailyProgress, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded) saveStoredXPRewards(xpRewards);
+  }, [xpRewards, isLoaded]);
+
   const triggerCelebration = useCallback(() => {
     sounds.playMilestoneFanfare();
     try {
@@ -291,12 +370,100 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         origin: { y: 0.6 },
         colors: ['#34D399', '#F472B6', '#FBBF24', '#60A5FA', '#A78BFA'],
       });
-    } catch {
-      // Confetti fallback
-    }
+    } catch {}
   }, []);
 
-  const gainXP = useCallback((amount: number) => {
+  /**
+   * Unlock a badge if not already unlocked
+   */
+  const unlockBadge = useCallback((badgeId: string) => {
+    setProfile(prev => {
+      if (prev.unlockedBadges.includes(badgeId)) return prev;
+      sounds.playLevelUp();
+      try {
+        confetti({
+          particleCount: 60,
+          spread: 60,
+          origin: { y: 0.6 },
+          colors: ['#F59E0B', '#10B981', '#6366F1']
+        });
+      } catch {}
+      return {
+        ...prev,
+        unlockedBadges: [...prev.unlockedBadges, badgeId],
+      };
+    });
+  }, []);
+
+  // Automatic badge condition checker
+  useEffect(() => {
+    if (!isLoaded) return;
+    const timer = setTimeout(() => {
+      const totalFocus = focusLogs.reduce((acc, l) => acc + l.durationMinutes, 0);
+
+      if (goals.length > 0 && !profile.unlockedBadges.includes('first-step')) {
+        unlockBadge('first-step');
+      }
+      if (totalFocus >= 60 && !profile.unlockedBadges.includes('focus-hero')) {
+        unlockBadge('focus-hero');
+      }
+      if (profile.streakDays >= 3 && !profile.unlockedBadges.includes('streak-3')) {
+        unlockBadge('streak-3');
+      }
+      if (goals.some(g => g.milestones.every(m => m.isCompleted)) && !profile.unlockedBadges.includes('course-master')) {
+        unlockBadge('course-master');
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [goals, focusLogs, profile.streakDays, profile.unlockedBadges, isLoaded, unlockBadge]);
+
+  /**
+   * Check if an XP reward with a specific sourceType and sourceId has already been awarded.
+   */
+  const hasXPRewardBeenAwarded = useCallback((sourceType: XPRewardSourceType, sourceId: string): boolean => {
+    return xpRewardsRef.current.some(r => r.sourceType === sourceType && r.sourceId === sourceId);
+  }, []);
+
+  /**
+   * Idempotent XP awarding function.
+   */
+  const awardXPOnce = useCallback((params: {
+    amount: number;
+    sourceType: XPRewardSourceType;
+    sourceId: string;
+    description?: string;
+    date?: string;
+  }): boolean => {
+    const { amount, sourceType, sourceId, description, date } = params;
+    const targetDate = date || getLocalDateString();
+
+    if (amount <= 0) return false;
+
+    // Check ref for instantaneous synchronous guard
+    if (xpRewardsRef.current.some(r => r.sourceType === sourceType && r.sourceId === sourceId)) {
+      return false;
+    }
+
+    const newReward: XPReward = {
+      id: `xp-${sourceType}-${sourceId}`,
+      sourceType,
+      sourceId,
+      amount,
+      date: targetDate,
+      timestamp: new Date().toISOString(),
+      description: description || `Awarded for ${sourceType}`,
+    };
+
+    // 1. Immediately update ref and ledger state
+    xpRewardsRef.current = [newReward, ...xpRewardsRef.current];
+    setXpRewards(prev => {
+      if (prev.some(r => r.sourceType === sourceType && r.sourceId === sourceId)) return prev;
+      const updated = [newReward, ...prev];
+      saveStoredXPRewards(updated);
+      return updated;
+    });
+
+    // 2. Increase profile XP & handle level progression
     setProfile(prev => {
       let newXP = prev.currentXP + amount;
       let newLevel = prev.level;
@@ -322,9 +489,146 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         level: newLevel,
         currentXP: newXP,
         nextLevelXP: newNextXP,
+        lastActiveDate: targetDate,
       };
     });
+
+    // 3. Record XP in DailyProgress
+    setDailyProgress(prev => {
+      const existingIndex = prev.findIndex(p => p.date === targetDate);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          xpEarned: (updated[existingIndex].xpEarned || 0) + amount,
+          updatedAt: new Date().toISOString(),
+        };
+        saveStoredDailyProgress(updated);
+        return updated;
+      } else {
+        const newDay: DailyProgress = {
+          date: targetDate,
+          focusMinutes: 0,
+          tasksCompleted: 0,
+          totalTasks: 0,
+          milestonesCompleted: 0,
+          xpEarned: amount,
+          updatedAt: new Date().toISOString(),
+        };
+        const updated = [newDay, ...prev];
+        saveStoredDailyProgress(updated);
+        return updated;
+      }
+    });
+
+    return true;
   }, []);
+
+  const gainXP = useCallback((amount: number, reason?: string) => {
+    const rewardId = `bonus-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    awardXPOnce({
+      amount,
+      sourceType: 'bonus',
+      sourceId: rewardId,
+      description: reason || 'Bonus XP',
+      date: getLocalDateString(),
+    });
+  }, [awardXPOnce]);
+
+  const buyStreakShield = useCallback((): { success: boolean; message: string } => {
+    const COST = 150;
+    if (profile.currentXP < COST) {
+      return { success: false, message: `Need ${COST} XP to buy a Streak Shield (You have ${profile.currentXP} XP).` };
+    }
+
+    setProfile(prev => ({
+      ...prev,
+      currentXP: prev.currentXP - COST,
+      streakShields: (prev.streakShields || 0) + 1,
+    }));
+
+    sounds.playStreakShield();
+    try {
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.6 },
+        colors: ['#60A5FA', '#34D399', '#FBBF24']
+      });
+    } catch {}
+
+    return { success: true, message: '🛡️ Streak Shield acquired! Your streak is now protected from missed days.' };
+  }, [profile.currentXP]);
+
+  const buyPlantSeed = useCallback((species: PlantSpecies): { success: boolean; message: string } => {
+    const plantInfo = PLANT_SPECIES_LIST.find(p => p.id === species);
+    if (!plantInfo) {
+      return { success: false, message: 'Unknown seed variety.' };
+    }
+
+    const unlocked = profile.unlockedPlants || ['succulent'];
+    if (unlocked.includes(species)) {
+      setProfile(prev => ({ ...prev, activePlant: species }));
+      sounds.playTap();
+      return { success: true, message: `Equipped ${plantInfo.name} in your Growth Terrarium!` };
+    }
+
+    if (profile.currentXP < plantInfo.costXP) {
+      return { success: false, message: `Need ${plantInfo.costXP} XP to unlock ${plantInfo.name} (You have ${profile.currentXP} XP).` };
+    }
+
+    const updatedUnlocked = [...unlocked, species];
+    setProfile(prev => ({
+      ...prev,
+      currentXP: prev.currentXP - plantInfo.costXP,
+      unlockedPlants: updatedUnlocked,
+      activePlant: species,
+    }));
+
+    awardXPOnce({
+      amount: 25,
+      sourceType: 'plant_unlocked',
+      sourceId: `plant-${species}-${Date.now()}`,
+      description: `Unlocked ${plantInfo.name}`,
+      date: getLocalDateString(),
+    });
+
+    if (updatedUnlocked.length >= 3) {
+      unlockBadge('greenhouse-collector');
+    }
+
+    sounds.playLevelUp();
+    try {
+      confetti({
+        particleCount: 65,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#10B981', '#34D399', '#F472B6', '#FBBF24']
+      });
+    } catch {}
+
+    return { success: true, message: `🌱 Unlocked and equipped ${plantInfo.name}!` };
+  }, [profile.unlockedPlants, profile.currentXP, awardXPOnce, unlockBadge]);
+
+  const setActivePlant = useCallback((species: PlantSpecies) => {
+    const unlocked = profile.unlockedPlants || ['succulent'];
+    if (unlocked.includes(species)) {
+      setProfile(prev => ({ ...prev, activePlant: species }));
+      sounds.playTap();
+    }
+  }, [profile.unlockedPlants]);
+
+  const recordDailyProgress = useCallback((updater: (prev: DailyProgress[]) => DailyProgress[]) => {
+    setDailyProgress(prev => {
+      const updated = updater(prev);
+      saveStoredDailyProgress(updated);
+      return updated;
+    });
+  }, []);
+
+  const getDailyProgressForDate = useCallback((dateStr: string): DailyProgress | undefined => {
+    return dailyProgress.find(p => p.date === dateStr);
+  }, [dailyProgress]);
 
   // Goal Creation with Starting Offset
   const createGoal = useCallback((data: {
@@ -337,6 +641,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     icon: string;
     targetDate?: string;
   }) => {
+    const todayDate = getLocalDateString();
     const total = Math.max(1, data.totalMilestones);
     const offset = Math.min(Math.max(0, data.startingOffset), total);
 
@@ -368,44 +673,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     setGoals(prev => [newGoal, ...prev]);
-    gainXP(30);
+    
+    awardXPOnce({
+      amount: 30,
+      sourceType: 'goal_created',
+      sourceId: newGoal.id,
+      description: `Created goal "${data.title}"`,
+      date: todayDate,
+    });
+
     sounds.playTaskPop();
-  }, [gainXP]);
+  }, [awardXPOnce]);
 
   const deleteGoal = useCallback((goalId: string) => {
     setGoals(prev => prev.filter(g => g.id !== goalId));
     sounds.playTap();
   }, []);
 
-  // Anti-Cheat Check
-  const requestCompleteMilestone = useCallback((goalId: string, milestone: MilestoneItem): { requiresVerification: boolean; reason?: string } => {
-    if (!profile.antiCheatEnabled) {
-      // If anti-cheat is disabled, allow direct check
-      confirmCompleteMilestone({ goalId, milestoneId: milestone.id });
-      return { requiresVerification: false };
-    }
-
-    const now = Date.now();
-    const cooldownMs = (profile.pacingCooldownSeconds || 45) * 1000;
-
-    // Check rapid clicking cooldown
-    if (lastMilestoneCompletedTime && now - lastMilestoneCompletedTime < cooldownMs) {
-      const remainingSecs = Math.ceil((cooldownMs - (now - lastMilestoneCompletedTime)) / 1000);
-      sounds.playWarning();
-      setAntiCheatModalTarget({ goalId, milestone });
-      return {
-        requiresVerification: true,
-        reason: `Pacing Guard Active! You just completed a milestone recently. Wait ${remainingSecs}s or write your proof of work / key takeaway note.`
-      };
-    }
-
-    // By default open verification modal to log reflection/proof
-    setAntiCheatModalTarget({ goalId, milestone });
-    return { requiresVerification: true };
-  }, [profile.antiCheatEnabled, profile.pacingCooldownSeconds, lastMilestoneCompletedTime]);
-
   const confirmCompleteMilestone = useCallback((payload: MilestoneCompletionPayload) => {
     const nowStr = new Date().toISOString();
+    const todayDate = getLocalDateString();
     setLastMilestoneCompletedTime(Date.now());
 
     let wasGoalFinished = false;
@@ -436,8 +723,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     }));
 
-    // Reward XP
-    gainXP(100);
+    awardXPOnce({
+      amount: 100,
+      sourceType: 'milestone',
+      sourceId: payload.milestoneId,
+      description: 'Completed Milestone',
+      date: todayDate,
+    });
+
+    setDailyProgress(prev => {
+      const existingIndex = prev.findIndex(p => p.date === todayDate);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          milestonesCompleted: (updated[existingIndex].milestonesCompleted || 0) + 1,
+          updatedAt: new Date().toISOString(),
+        };
+        saveStoredDailyProgress(updated);
+        return updated;
+      } else {
+        const newDay: DailyProgress = {
+          date: todayDate,
+          focusMinutes: 0,
+          tasksCompleted: 0,
+          totalTasks: 0,
+          milestonesCompleted: 1,
+          xpEarned: 0,
+          updatedAt: new Date().toISOString(),
+        };
+        const updated = [newDay, ...prev];
+        saveStoredDailyProgress(updated);
+        return updated;
+      }
+    });
+
     setAntiCheatModalTarget(null);
 
     if (wasGoalFinished) {
@@ -445,7 +765,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } else {
       sounds.playMilestoneFanfare();
     }
-  }, [gainXP, triggerCelebration]);
+  }, [awardXPOnce, triggerCelebration]);
+
+  const requestCompleteMilestone = useCallback((goalId: string, milestone: MilestoneItem): { requiresVerification: boolean; reason?: string } => {
+    if (!profile.antiCheatEnabled) {
+      confirmCompleteMilestone({ goalId, milestoneId: milestone.id });
+      return { requiresVerification: false };
+    }
+
+    const now = Date.now();
+    const cooldownMs = (profile.pacingCooldownSeconds || 45) * 1000;
+
+    if (lastMilestoneCompletedTime && now - lastMilestoneCompletedTime < cooldownMs) {
+      const remainingSecs = Math.ceil((cooldownMs - (now - lastMilestoneCompletedTime)) / 1000);
+      sounds.playWarning();
+      setAntiCheatModalTarget({ goalId, milestone });
+      return {
+        requiresVerification: true,
+        reason: `Pacing Guard Active! You just completed a milestone recently. Wait ${remainingSecs}s or write your proof of work / key takeaway note.`
+      };
+    }
+
+    setAntiCheatModalTarget({ goalId, milestone });
+    return { requiresVerification: true };
+  }, [profile.antiCheatEnabled, profile.pacingCooldownSeconds, lastMilestoneCompletedTime, confirmCompleteMilestone]);
 
   const uncompleteMilestone = useCallback((goalId: string, milestoneId: string) => {
     setGoals(prev => prev.map(goal => {
@@ -469,18 +812,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     sounds.playTap();
   }, []);
 
-  // Priority Tasks & Rituals
   const togglePriorityTask = useCallback((taskId: string) => {
+    const todayDate = getLocalDateString();
+
     setDailyPlan(prev => {
-      const updated = prev.priorityTasks.map(t => {
+      let wasTicked = false;
+      let targetTask: PriorityTask | undefined;
+
+      const updatedTasks = prev.priorityTasks.map(t => {
         if (t.id === taskId) {
           const nextState = !t.completed;
-          if (nextState) {
-            sounds.playTaskPop();
-            gainXP(t.xpValue || 50);
-          } else {
-            sounds.playTap();
-          }
+          wasTicked = nextState;
+          targetTask = t;
           return {
             ...t,
             completed: nextState,
@@ -489,47 +832,132 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         return t;
       });
-      return { ...prev, priorityTasks: updated };
-    });
-  }, [gainXP]);
 
-  const addPriorityTask = useCallback((title: string, goalId?: string, estimatedMinutes?: number) => {
+      if (wasTicked && targetTask) {
+        sounds.playTaskPop();
+        awardXPOnce({
+          amount: targetTask.xpValue || 50,
+          sourceType: 'task',
+          sourceId: taskId,
+          description: `Completed: ${targetTask.title}`,
+          date: todayDate,
+        });
+      } else {
+        sounds.playTap();
+      }
+
+      const completedCount = updatedTasks.filter(t => t.completed).length;
+      const totalCount = updatedTasks.length;
+
+      setDailyProgress(progPrev => {
+        const existingIndex = progPrev.findIndex(p => p.date === todayDate);
+        if (existingIndex >= 0) {
+          const updated = [...progPrev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            tasksCompleted: completedCount,
+            totalTasks: totalCount,
+            updatedAt: new Date().toISOString(),
+          };
+          saveStoredDailyProgress(updated);
+          return updated;
+        } else {
+          const newDay: DailyProgress = {
+            date: todayDate,
+            focusMinutes: 0,
+            tasksCompleted: completedCount,
+            totalTasks: totalCount,
+            milestonesCompleted: 0,
+            xpEarned: 0,
+            updatedAt: new Date().toISOString(),
+          };
+          const updated = [newDay, ...progPrev];
+          saveStoredDailyProgress(updated);
+          return updated;
+        }
+      });
+
+      return { ...prev, priorityTasks: updatedTasks };
+    });
+  }, [awardXPOnce]);
+
+  const addPriorityTask = useCallback((title: string, goalId?: string, estimatedMinutes?: number, isMustWin?: boolean) => {
     if (!title.trim()) return;
-    const newTask = {
+    const todayDate = getLocalDateString();
+    const newTask: PriorityTask = {
       id: `task-${Date.now()}`,
       title: title.trim(),
       completed: false,
       goalId,
       estimatedMinutes: estimatedMinutes || 30,
-      xpValue: 40,
+      xpValue: isMustWin ? 60 : 40,
+      isMustWin: isMustWin || false,
     };
-    setDailyPlan(prev => ({
-      ...prev,
-      priorityTasks: [...prev.priorityTasks, newTask],
-    }));
+    
+    setDailyPlan(prev => {
+      const updated = {
+        ...prev,
+        priorityTasks: [...prev.priorityTasks, newTask],
+      };
+
+      setDailyProgress(progPrev => {
+        const existingIndex = progPrev.findIndex(p => p.date === todayDate);
+        const total = updated.priorityTasks.length;
+        const done = updated.priorityTasks.filter(t => t.completed).length;
+        if (existingIndex >= 0) {
+          const u = [...progPrev];
+          u[existingIndex] = { ...u[existingIndex], totalTasks: total, tasksCompleted: done };
+          saveStoredDailyProgress(u);
+          return u;
+        }
+        return progPrev;
+      });
+
+      return updated;
+    });
     sounds.playTap();
   }, []);
 
   const deletePriorityTask = useCallback((taskId: string) => {
-    setDailyPlan(prev => ({
-      ...prev,
-      priorityTasks: prev.priorityTasks.filter(t => t.id !== taskId),
-    }));
+    const todayDate = getLocalDateString();
+    setDailyPlan(prev => {
+      const updated = {
+        ...prev,
+        priorityTasks: prev.priorityTasks.filter(t => t.id !== taskId),
+      };
+
+      setDailyProgress(progPrev => {
+        const existingIndex = progPrev.findIndex(p => p.date === todayDate);
+        const total = updated.priorityTasks.length;
+        const done = updated.priorityTasks.filter(t => t.completed).length;
+        if (existingIndex >= 0) {
+          const u = [...progPrev];
+          u[existingIndex] = { ...u[existingIndex], totalTasks: total, tasksCompleted: done };
+          saveStoredDailyProgress(u);
+          return u;
+        }
+        return progPrev;
+      });
+
+      return updated;
+    });
     sounds.playTap();
   }, []);
 
   const updateMorningPlan = useCallback((data: {
     targetFocusMinutes: number;
-    tasks: { title: string; goalId?: string; estimatedMinutes?: number }[];
+    tasks: { title: string; goalId?: string; estimatedMinutes?: number; isMustWin?: boolean }[];
     gratitudeNote?: string;
   }) => {
+    const todayDate = getLocalDateString();
     const formattedTasks = data.tasks.map((t, idx) => ({
       id: `task-morning-${Date.now()}-${idx}`,
       title: t.title,
       completed: false,
       goalId: t.goalId,
       estimatedMinutes: t.estimatedMinutes || 30,
-      xpValue: 50,
+      xpValue: t.isMustWin ? 70 : 50,
+      isMustWin: t.isMustWin || idx === 0,
     }));
 
     setDailyPlan(prev => ({
@@ -540,31 +968,65 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       morningCompleted: true,
     }));
 
-    gainXP(60);
-    sounds.playTaskPop();
-  }, [gainXP]);
+    awardXPOnce({
+      amount: 60,
+      sourceType: 'morning_kickoff',
+      sourceId: `morning-${todayDate}`,
+      description: 'Sunrise Intent Set',
+      date: todayDate,
+    });
 
-  const updateEveningReflection = useCallback((reflection: string) => {
+    setDailyProgress(progPrev => {
+      const existingIndex = progPrev.findIndex(p => p.date === todayDate);
+      if (existingIndex >= 0) {
+        const updated = [...progPrev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          totalTasks: formattedTasks.length,
+          tasksCompleted: 0,
+        };
+        saveStoredDailyProgress(updated);
+        return updated;
+      }
+      return progPrev;
+    });
+
+    sounds.playTaskPop();
+  }, [awardXPOnce]);
+
+  const updateEveningReflection = useCallback((data: { reflection: string; energyRating?: number; dailyWin?: string }) => {
+    const todayDate = getLocalDateString();
+
     setDailyPlan(prev => ({
       ...prev,
-      eveningReflection: reflection,
+      eveningReflection: data.reflection,
+      energyRating: data.energyRating || 5,
+      dailyWin: data.dailyWin || '',
       eveningCompleted: true,
     }));
-    gainXP(80);
-    triggerCelebration();
-  }, [gainXP, triggerCelebration]);
 
-  // Focus Log
+    awardXPOnce({
+      amount: 80,
+      sourceType: 'evening_reflection',
+      sourceId: `evening-${todayDate}`,
+      description: 'Sunset Reflection & Momentum Preserved',
+      date: todayDate,
+    });
+
+    triggerCelebration();
+  }, [awardXPOnce, triggerCelebration]);
+
   const recordFocusSession = useCallback((data: {
     durationMinutes: number;
     goalId?: string;
     taskTitle: string;
     notes?: string;
   }) => {
+    const todayDate = getLocalDateString();
     const xp = Math.round(data.durationMinutes * 2);
     const newLog: FocusSessionLog = {
       id: `flog-${Date.now()}`,
-      date: new Date().toISOString().split('T')[0],
+      date: todayDate,
       durationMinutes: data.durationMinutes,
       goalId: data.goalId,
       taskTitle: data.taskTitle,
@@ -574,12 +1036,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     setFocusLogs(prev => [newLog, ...prev]);
-    gainXP(xp);
-    sounds.playTimerFinish();
-  }, [gainXP]);
 
-  // Social Cheers
+    awardXPOnce({
+      amount: xp,
+      sourceType: 'focus_session',
+      sourceId: newLog.id,
+      description: `Focused ${data.durationMinutes}m on "${data.taskTitle}"`,
+      date: todayDate,
+    });
+
+    setDailyProgress(prev => {
+      const existingIndex = prev.findIndex(p => p.date === todayDate);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          focusMinutes: (updated[existingIndex].focusMinutes || 0) + data.durationMinutes,
+          updatedAt: new Date().toISOString(),
+        };
+        saveStoredDailyProgress(updated);
+        return updated;
+      } else {
+        const newDay: DailyProgress = {
+          date: todayDate,
+          focusMinutes: data.durationMinutes,
+          tasksCompleted: 0,
+          totalTasks: 0,
+          milestonesCompleted: 0,
+          xpEarned: 0,
+          updatedAt: new Date().toISOString(),
+        };
+        const updated = [newDay, ...prev];
+        saveStoredDailyProgress(updated);
+        return updated;
+      }
+    });
+
+    sounds.playTimerFinish();
+  }, [awardXPOnce]);
+
   const sendCheer = useCallback((friendId: string, emoji: string, label: string) => {
+    const todayDate = getLocalDateString();
     const cheer = {
       id: `cheer-${Date.now()}`,
       fromName: profile.name,
@@ -600,8 +1097,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
 
     sounds.playTaskPop();
-    gainXP(15);
-  }, [profile.name, profile.avatarId, gainXP]);
+
+    awardXPOnce({
+      amount: 15,
+      sourceType: 'cheer',
+      sourceId: cheer.id,
+      description: `Cheered: "${label}"`,
+      date: todayDate,
+    });
+  }, [profile.name, profile.avatarId, awardXPOnce]);
+
+  const sendWaterDrop = useCallback((friendId: string) => {
+    const todayDate = getLocalDateString();
+    const waterDropCheer = {
+      id: `water-${Date.now()}`,
+      fromName: profile.name,
+      avatarId: profile.avatarId,
+      emoji: '💧',
+      label: 'Water Drop',
+      timestamp: 'Just now',
+    };
+
+    setFriends(prev => prev.map(f => {
+      if (f.id === friendId) {
+        return {
+          ...f,
+          recentCheers: [waterDropCheer, ...(f.recentCheers || [])].slice(0, 5)
+        };
+      }
+      return f;
+    }));
+
+    sounds.playWaterDrop();
+
+    awardXPOnce({
+      amount: 10,
+      sourceType: 'cheer',
+      sourceId: waterDropCheer.id,
+      description: 'Watered buddy virtual plant',
+      date: todayDate,
+    });
+  }, [profile.name, profile.avatarId, awardXPOnce]);
 
   const addNewFriend = useCallback((data: {
     name: string;
@@ -628,18 +1164,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     sounds.playTap();
   }, []);
 
-  // Theme synchronizer with html.dark
+  // Theme & Accent synchronizer
   useEffect(() => {
     if (typeof document !== 'undefined') {
       if (profile.theme === 'dark') {
         document.documentElement.classList.add('dark');
         document.documentElement.classList.remove('light');
+        document.documentElement.setAttribute('data-dark-style', profile.darkStyle || 'obsidian');
       } else {
         document.documentElement.classList.remove('dark');
         document.documentElement.classList.add('light');
+        document.documentElement.removeAttribute('data-dark-style');
       }
+      document.documentElement.setAttribute('data-theme', profile.themeAccent || 'emerald');
     }
-  }, [profile.theme]);
+  }, [profile.theme, profile.themeAccent, profile.darkStyle]);
+
+  const updateProfile = useCallback((updates: Partial<UserProfile>) => {
+    setProfile(prev => {
+      const updated = { ...prev, ...updates };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('pathly_user_profile', JSON.stringify(updated));
+      }
+      return updated;
+    });
+    sounds.playTap();
+  }, []);
 
   const toggleTheme = useCallback(() => {
     setProfile(prev => {
@@ -649,12 +1199,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     sounds.playTap();
   }, []);
 
+  const setThemeAccent = useCallback((accent: 'emerald' | 'indigo' | 'rose' | 'amber' | 'cyan' | 'coral') => {
+    setProfile(prev => ({ ...prev, themeAccent: accent }));
+    sounds.playTap();
+  }, []);
+
+  const setDarkStyle = useCallback((style: 'obsidian' | 'oled' | 'midnight' | 'coffee') => {
+    setProfile(prev => ({ ...prev, darkStyle: style }));
+    sounds.playTap();
+  }, []);
+
   const toggleSound = useCallback(() => {
     setProfile(prev => {
       const nextVal = !prev.soundEnabled;
       sounds.setMuted(!nextVal);
       return { ...prev, soundEnabled: nextVal };
     });
+  }, []);
+
+  const setSfxVolume = useCallback((vol: number) => {
+    setProfile(prev => ({ ...prev, sfxVolume: vol }));
+    sounds.setSfxVolume(vol);
   }, []);
 
   const toggleAntiCheat = useCallback(() => {
@@ -669,13 +1234,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setFriends(INITIAL_FRIENDS);
     setFocusLogs([]);
     setBadges(DEFAULT_BADGES);
+    setDailyProgress([]);
+    setXpRewards([]);
+    xpRewardsRef.current = [];
     saveStoredGoals(INITIAL_GOALS);
     saveStoredDailyPlan(INITIAL_DAILY_PLAN);
     saveStoredProfile(INITIAL_USER_PROFILE);
     saveStoredFriends(INITIAL_FRIENDS);
     saveStoredFocusLogs([]);
     saveStoredBadges(DEFAULT_BADGES);
+    saveStoredDailyProgress([]);
+    saveStoredXPRewards([]);
     sounds.playTap();
+  }, []);
+
+  const exportDataJSON = useCallback(() => {
+    return exportAllDataJSON();
+  }, []);
+
+  const importDataJSON = useCallback((jsonStr: string): boolean => {
+    const success = importAllDataJSON(jsonStr);
+    if (success) {
+      setGoals(getStoredGoals());
+      setDailyPlan(getStoredDailyPlan());
+      setProfile(getStoredProfile());
+      setFriends(getStoredFriends());
+      setFocusLogs(getStoredFocusLogs());
+      setBadges(getStoredBadges());
+      setDailyProgress(getInitializedDailyProgress());
+      setXpRewards(getInitializedXPRewards());
+      sounds.playLevelUp();
+    }
+    return success;
   }, []);
 
   // Google Authentication & Cloud Sync
@@ -689,7 +1279,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('pathly_friend_code', user.friendCode);
       }
 
-      // Check if user has existing cloud data
       const cloudData = await loadUserDataFromFirestore(user.uid);
       if (cloudData) {
         if (cloudData.goals) setGoals(cloudData.goals as Goal[]);
@@ -698,8 +1287,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (cloudData.friends) setFriends(cloudData.friends as FriendBuddy[]);
         if (cloudData.focusLogs) setFocusLogs(cloudData.focusLogs as FocusSessionLog[]);
         if (cloudData.badges) setBadges(cloudData.badges as Badge[]);
+        if (cloudData.dailyProgress) setDailyProgress(cloudData.dailyProgress as DailyProgress[]);
+        if (cloudData.xpRewards) {
+          const loadedRewards = cloudData.xpRewards as XPReward[];
+          setXpRewards(loadedRewards);
+          xpRewardsRef.current = loadedRewards;
+        }
       } else {
-        // First time cloud sync: migrate local state to Firestore
         saveUserDataToFirestore(user.uid, {
           goals,
           dailyPlan,
@@ -707,6 +1301,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           friends,
           focusLogs,
           badges,
+          dailyProgress,
+          xpRewards,
           friendCode: user.friendCode,
         });
       }
@@ -715,7 +1311,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.error('Google Sign In Error:', err);
       throw err;
     }
-  }, [goals, dailyPlan, profile, friends, focusLogs, badges]);
+  }, [goals, dailyPlan, profile, friends, focusLogs, badges, dailyProgress, xpRewards]);
 
   const handleSignOut = useCallback(async () => {
     await logoutUser();
@@ -920,12 +1516,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         friends,
         focusLogs,
         badges,
+        dailyProgress,
+        xpRewards,
         friendCode,
         displayName: authUser.displayName,
         photoURL: authUser.photoURL,
       });
     }
-  }, [goals, dailyPlan, profile, friends, focusLogs, badges, authUser, friendCode, isLoaded]);
+  }, [goals, dailyPlan, profile, friends, focusLogs, badges, dailyProgress, xpRewards, authUser, friendCode, isLoaded]);
 
   const refreshFriendRequests = useCallback(async () => {
     if (!friendCode) return;
@@ -945,6 +1543,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         friends,
         focusLogs,
         badges,
+        dailyProgress,
+        xpRewards,
         authUser,
         friendCode,
         updateCustomFriendCode,
@@ -974,14 +1574,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateEveningReflection,
         recordFocusSession,
         sendCheer,
+        sendWaterDrop,
         addNewFriend,
         gainXP,
+        awardXPOnce,
+        hasXPRewardBeenAwarded,
+        recordDailyProgress,
+        getDailyProgressForDate,
+        buyStreakShield,
+        buyPlantSeed,
+        setActivePlant,
+        unlockBadge,
         toggleTheme,
         isDarkMode: profile.theme === 'dark',
+        updateProfile,
+        setThemeAccent,
+        setDarkStyle,
         toggleSound,
+        setSfxVolume,
         toggleAntiCheat,
         triggerCelebration,
         resetAllDemoData,
+        exportDataJSON,
+        importDataJSON,
       }}
     >
       {children}

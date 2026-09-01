@@ -37,7 +37,7 @@ export function NewGoalModal({ isOpen, onClose }: NewGoalModalProps) {
   const [category, setCategory] = useState<GoalCategory>('coding');
   const [totalMilestones, setTotalMilestones] = useState(10);
   const [startingOffset, setStartingOffset] = useState(0);
-  const [color, setColor] = useState(COLOR_OPTIONS[0].id);
+  const color = COLOR_OPTIONS[0].id;
   const [icon, setIcon] = useState('🎯');
   const [targetDate, setTargetDate] = useState('');
 

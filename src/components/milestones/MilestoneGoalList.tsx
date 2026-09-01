@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { Goal, MilestoneItem } from '@/types';
+import { MilestoneItem } from '@/types';
 import { 
   CheckCircle2, 
   Circle, 

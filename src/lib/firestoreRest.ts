@@ -128,7 +128,6 @@ export async function restGetFriendRequests(tag: string): Promise<{
   sent: Array<Record<string, unknown>>;
 }> {
   const clean = cleanTagKey(tag);
-  const formatted = formatTag(tag);
   const incoming: Array<Record<string, unknown>> = [];
   const sent: Array<Record<string, unknown>> = [];
 

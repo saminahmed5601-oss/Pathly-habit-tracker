@@ -26,6 +26,20 @@ export interface Goal {
   lastProgressAt?: string;
 }
 
+export type PlantSpecies = 'bonsai' | 'sunflower' | 'succulent' | 'cherry_blossom' | 'monstera';
+
+export interface PlantInfo {
+  id: PlantSpecies;
+  name: string;
+  seedName: string;
+  tagline: string;
+  costXP: number;
+  emoji: string;
+  color: string;
+  description: string;
+  benefit: string;
+}
+
 export interface PriorityTask {
   id: string;
   title: string;
@@ -34,6 +48,7 @@ export interface PriorityTask {
   goalId?: string;
   estimatedMinutes?: number;
   xpValue: number;
+  isMustWin?: boolean;
 }
 
 export interface DailyPlan {
@@ -42,6 +57,8 @@ export interface DailyPlan {
   priorityTasks: PriorityTask[];
   gratitudeNote?: string;
   eveningReflection?: string;
+  energyRating?: number; // 1 to 5 stars
+  dailyWin?: string; // 1-line daily win
   morningCompleted: boolean;
   eveningCompleted: boolean;
   createdAt: string;
@@ -58,6 +75,8 @@ export interface FocusSessionLog {
   xpEarned: number;
 }
 
+export type BadgeTier = 'wood' | 'silver' | 'gold' | 'prismatic';
+
 export interface Badge {
   id: string;
   title: string;
@@ -65,11 +84,13 @@ export interface Badge {
   icon: string;
   unlockedAt?: string;
   rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  tier?: BadgeTier;
 }
 
 export interface UserProfile {
   name: string;
   avatarId: string;
+  bio?: string;
   level: number;
   currentXP: number;
   nextLevelXP: number;
@@ -78,8 +99,13 @@ export interface UserProfile {
   lastActiveDate: string;
   streakShields: number;
   unlockedBadges: string[];
+  unlockedPlants?: PlantSpecies[];
+  activePlant?: PlantSpecies;
   soundEnabled: boolean;
+  sfxVolume?: number;
   theme: 'light' | 'dark';
+  darkStyle?: 'obsidian' | 'oled' | 'midnight' | 'coffee';
+  themeAccent?: 'emerald' | 'indigo' | 'rose' | 'amber' | 'cyan' | 'coral';
   antiCheatEnabled: boolean;
   pacingCooldownSeconds: number;
 }
@@ -105,6 +131,12 @@ export interface FriendBuddy {
   todayMinutes: number;
   todayTargetMinutes: number;
   todayGoalTitle: string;
+  focusStatus?: {
+    isFocusing: boolean;
+    activity?: string;
+    minutesLeft?: number;
+    plantStage?: string;
+  };
   totalMilestonesCompleted?: number;
   totalMilestonesCount?: number;
   activeGoals?: Array<{ title: string; completedCount: number; totalCount: number; icon: string }>;
@@ -130,3 +162,36 @@ export interface AntiCheatAttempt {
   milestoneId: string;
   timestamp: number;
 }
+
+export interface DailyProgress {
+  date: string; // YYYY-MM-DD (local calendar date)
+  focusMinutes: number;
+  tasksCompleted: number;
+  totalTasks: number;
+  milestonesCompleted: number;
+  xpEarned: number;
+  updatedAt?: string;
+}
+
+export type XPRewardSourceType = 
+  | 'task' 
+  | 'milestone' 
+  | 'focus_session' 
+  | 'morning_kickoff' 
+  | 'evening_reflection' 
+  | 'cheer' 
+  | 'goal_created' 
+  | 'plant_unlocked'
+  | 'bonus';
+
+export interface XPReward {
+  id: string;
+  sourceType: XPRewardSourceType;
+  sourceId: string;
+  amount: number;
+  date: string; // YYYY-MM-DD (local)
+  timestamp: string; // ISO
+  description?: string;
+}
+
+
